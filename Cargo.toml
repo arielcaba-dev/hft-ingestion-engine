@@ -1,0 +1,24 @@
+[package]
+name = "hft-ingestion-engine"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.28", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+# For WebSocket connections
+tokio-tungstenite = "0.20"
+futures-util = "0.3" 
+# For configuration
+config = "0.13"
+# For logging
+log = "0.4"
+env_logger = "0.10"
+# For lock-free ring buffer (using crossbeam-queue as a foundation or manual implementation)
+# For locking-free traits
+async-trait = "0.1"
+crossbeam = "0.8"
+
+# For high-precision timing
+chrono = "0.4"
