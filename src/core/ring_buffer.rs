@@ -52,6 +52,7 @@ impl<T> RingBuffer<T> {
         Ok(())
     }
 
+
     pub fn pop(&self) -> Option<T> {
         let tail = self.tail.0.load(Ordering::Relaxed);
         let head = self.head.0.load(Ordering::Acquire);
@@ -67,5 +68,69 @@ impl<T> RingBuffer<T> {
 
         self.tail.0.store(tail.wrapping_add(1), Ordering::Release);
         item
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use std::thread;
+
+    #[test]
+    fn test_push_pop_basic() {
+        let rb = RingBuffer::<i32>::new(4);
+        assert!(rb.push(1).is_ok());
+        assert!(rb.push(2).is_ok());
+        assert_eq!(rb.pop(), Some(1));
+        assert_eq!(rb.pop(), Some(2));
+        assert_eq!(rb.pop(), None);
+    }
+
+    #[test]
+    fn test_buffer_full() {
+        let rb = RingBuffer::<i32>::new(2);
+        assert!(rb.push(1).is_ok());
+        assert!(rb.push(2).is_ok());
+        assert!(rb.push(3).is_err()); // Should be full
+        assert_eq!(rb.pop(), Some(1));
+        assert!(rb.push(3).is_ok()); // Should have space now
+    }
+
+    #[test]
+    fn test_spsc_threaded() {
+        let rb = Arc::new(RingBuffer::<i32>::new(1024));
+        let rb_producer = rb.clone();
+        let rb_consumer = rb.clone();
+
+        let producer = thread::spawn(move || {
+            for i in 0..10_000 {
+                loop {
+                    if rb_producer.push(i).is_ok() {
+                        break;
+                    }
+                    thread::yield_now();
+                }
+            }
+        });
+
+        let consumer = thread::spawn(move || {
+            let mut count = 0;
+            for i in 0..10_000 {
+                loop {
+                    if let Some(val) = rb_consumer.pop() {
+                        assert_eq!(val, i);
+                        count += 1;
+                        break;
+                    }
+                    thread::yield_now();
+                }
+            }
+            count
+        });
+
+        producer.join().unwrap();
+        let count = consumer.join().unwrap();
+        assert_eq!(count, 10_000);
     }
 }

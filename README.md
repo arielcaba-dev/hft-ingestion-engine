@@ -55,6 +55,14 @@ The application will:
 3. Normalize incoming trades.
 4. Publish mock messages to the configured Redpanda topic.
 
+## Testing
+
+To run the unit tests (which include a threaded stress test for the Ring Buffer):
+
+```bash
+cargo test
+```
+
 ## Project Structure
 
 ```
