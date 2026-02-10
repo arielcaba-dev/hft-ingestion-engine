@@ -1,6 +1,5 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::cell::UnsafeCell;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 // Cache line size padding to prevent false sharing
 #[repr(align(64))]
@@ -19,8 +18,11 @@ unsafe impl<T: Send> Send for RingBuffer<T> {}
 
 impl<T> RingBuffer<T> {
     pub fn new(capacity: usize) -> Self {
-        assert!(capacity > 0 && capacity.is_power_of_two(), "Capacity must be a power of two");
-        
+        assert!(
+            capacity > 0 && capacity.is_power_of_two(),
+            "Capacity must be a power of two"
+        );
+
         let mut buffer = Vec::with_capacity(capacity);
         for _ in 0..capacity {
             buffer.push(UnsafeCell::new(None));
@@ -52,7 +54,6 @@ impl<T> RingBuffer<T> {
         Ok(())
     }
 
-
     pub fn pop(&self) -> Option<T> {
         let tail = self.tail.0.load(Ordering::Relaxed);
         let head = self.head.0.load(Ordering::Acquire);
@@ -62,9 +63,7 @@ impl<T> RingBuffer<T> {
         }
 
         let index = tail & self.mask;
-        let item = unsafe {
-            (*self.buffer[index].get()).take()
-        };
+        let item = unsafe { (*self.buffer[index].get()).take() };
 
         self.tail.0.store(tail.wrapping_add(1), Ordering::Release);
         item

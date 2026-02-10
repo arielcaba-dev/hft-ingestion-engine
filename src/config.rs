@@ -1,5 +1,5 @@
-use serde::{Deserialize, Replicate, Serialize};
-use config::{Config, config, File};
+use config::Config;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -27,7 +27,7 @@ pub struct RedpandaConfig {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct SymbolConfig {
-    pub internal_id: String, // e.g., "BTC-USD"
+    pub internal_id: String,                        // e.g., "BTC-USD"
     pub exchange_mappings: HashMap<String, String>, // "binance" -> "BTCUSDT", "kraken" -> "XXBTZUSD"
 }
 
@@ -47,7 +47,7 @@ impl Settings {
         // I will return a mock config or expect a file if one is provided.
         // But to make it runnable without external config file for now, I'll use a hardcoded default or builder pattern if needed.
         // However, standard pattern is to load from file. let's assume a config.toml exists or use defaults.
-        
+
         // Constructing a default config for demonstration purposes
         let default_settings = Settings {
             exchanges: HashMap::new(),
