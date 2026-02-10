@@ -88,3 +88,50 @@ impl MessageProducer for RedpandaProducer {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_producer_initialization_failure() {
+        let config = RedpandaConfig {
+            brokers: "invalid_host:9092".to_string(),
+            topic_prefix: "test".to_string(),
+        };
+        let mut producer = RedpandaProducer::new(config);
+
+        // Should fail to connect to invalid host or at least return error
+        // Note: kafka crate might not fail immediately on creation if it doesn't connect,
+        // but our initialize() calls .create() which usually checks metadata.
+        // If it doesn't fail, we might need to adjust expectation, but let's try.
+        let result = producer.initialize().await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_send_before_initialization() {
+        let config = RedpandaConfig {
+            brokers: "localhost:9092".to_string(),
+            topic_prefix: "test".to_string(),
+        };
+        let producer = RedpandaProducer::new(config);
+
+        // Create dummy data
+        let data = NormalizedMarketData {
+            symbol_id: "BTC-USD".to_string(),
+            exchange: "binance".to_string(),
+            event_type: crate::model::MarketEventType::Trade,
+            price: 100000.0,
+            quantity: 0.1,
+            time_exchange: chrono::Utc::now(),
+            time_ingest: chrono::Utc::now(),
+            sequence: 0,
+            is_snapshot: false,
+        };
+
+        // Should fail because initialize() was never called
+        let result = producer.send("test_topic", &data).await;
+        assert_eq!(result.err(), Some("Producer not initialized".to_string()));
+    }
+}
