@@ -3,6 +3,10 @@ name = "hft-ingestion-engine"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "hft_ingestion_engine"
+path = "src/lib.rs"
+
 [dependencies]
 tokio = { version = "1.28", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -26,3 +30,10 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # For Redpanda/Kafka (Pure Rust, Sync)
 kafka = "0.10"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["async_tokio"] }
+
+[[bench]]
+name = "ring_buffer_bench"
+harness = false
