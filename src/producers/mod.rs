@@ -2,7 +2,7 @@ use crate::config::RedpandaConfig;
 use crate::model::NormalizedMarketData;
 use async_trait::async_trait;
 use kafka::producer::{Producer, Record, RequiredAcks};
-use log::{error, info, warn};
+use log::info;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 

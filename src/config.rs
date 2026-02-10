@@ -33,9 +33,9 @@ pub struct SymbolConfig {
 
 impl Settings {
     pub fn new() -> Result<Self, config::ConfigError> {
-        let run_mode = std::env::var("RUN_MODE").unwrap_or_else(|_| "development".into());
+        let _run_mode = std::env::var("RUN_MODE").unwrap_or_else(|_| "development".into());
 
-        let s = Config::builder()
+        let _s = Config::builder()
             // Start with a default configuration (could also be a file)
             // .add_source(File::with_name("config/default"))
             // Add in settings from the environment (with a prefix of APP)
