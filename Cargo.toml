@@ -23,3 +23,6 @@ crossbeam = "0.8"
 
 # For high-precision timing
 chrono = { version = "0.4", features = ["serde"] }
+
+# For Redpanda/Kafka (Pure Rust, Sync)
+kafka = "0.10"

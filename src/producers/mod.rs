@@ -1,6 +1,10 @@
-use async_trait::async_trait;
-use crate::model::NormalizedMarketData;
 use crate::config::RedpandaConfig;
+use crate::model::NormalizedMarketData;
+use async_trait::async_trait;
+use kafka::producer::{Producer, Record, RequiredAcks};
+use log::{error, info, warn};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 #[async_trait]
 pub trait MessageProducer {
@@ -8,24 +12,79 @@ pub trait MessageProducer {
 }
 
 pub struct RedpandaProducer {
+    // kafka crate producer is not thread safe for sharing across threads easily without mutex?
+    // actually it might be, but usually we wrap in Mutex or use one per thread.
+    // simpler to wrap in Arc<Mutex<>> for async context.
+    producer: Option<Arc<Mutex<Producer>>>,
     config: RedpandaConfig,
-    // In reality, this would hold a rdkafka::producer::FutureProducer
 }
 
 impl RedpandaProducer {
     pub fn new(config: RedpandaConfig) -> Self {
-        Self { config }
+        Self {
+            producer: None,
+            config,
+        }
+    }
+
+    pub async fn initialize(&mut self) -> Result<(), String> {
+        let brokers: Vec<String> = self
+            .config
+            .brokers
+            .split(',')
+            .map(|s| s.to_string())
+            .collect();
+        // Blocking initialization
+        let brokers_clone = brokers.clone();
+
+        let producer = tokio::task::spawn_blocking(move || {
+            Producer::from_hosts(brokers_clone)
+                .with_ack_timeout(Duration::from_secs(1))
+                .with_required_acks(RequiredAcks::One)
+                .create()
+        })
+        .await
+        .map_err(|e| format!("Task join error: {}", e))?
+        .map_err(|e| format!("Failed to create Kafka producer: {}", e))?;
+
+        info!(
+            "Created Redpanda Producer for brokers: {}",
+            self.config.brokers
+        );
+        self.producer = Some(Arc::new(Mutex::new(producer)));
+        Ok(())
     }
 }
 
 #[async_trait]
 impl MessageProducer for RedpandaProducer {
     async fn send(&self, topic: &str, data: &NormalizedMarketData) -> Result<(), String> {
-        // Serialize data (e.g., JSON or Bincode)
         let payload = serde_json::to_vec(data).map_err(|e| e.to_string())?;
-        
-        // Mock sending to Redpanda
-        println!("Producing to topic {}: {} bytes", topic, payload.len());
-        Ok(())
+
+        if let Some(producer_arc) = &self.producer {
+            let producer = producer_arc.clone();
+            let topic = topic.to_string();
+            let key = data.symbol_id.clone(); // Use symbol_id as key
+
+            // Perform blocking send in a separate thread
+            // Note: In high perf HFT, we wouldn't spawn a thread per message.
+            // We would use a dedicated thread or existing blocking thread.
+            // But RedpandaProducer trait is async here.
+            // For now, spawn_blocking is "okay" for MVP validation.
+
+            tokio::task::spawn_blocking(move || {
+                let mut locked_producer = producer.lock().unwrap();
+                let record =
+                    Record::from_key_value(topic.as_str(), key.as_str(), payload.as_slice());
+                locked_producer.send(&record)
+            })
+            .await
+            .map_err(|e| format!("Task join error: {}", e))?
+            .map_err(|e| format!("Failed to produce: {}", e))?;
+
+            Ok(())
+        } else {
+            Err("Producer not initialized".to_string())
+        }
     }
 }

@@ -34,13 +34,17 @@ Located in `src/model.rs` and `src/normalizers/`.
     - Connects to `wss://stream.binance.com:9443/ws`.
     - Auto-subscribes to `btcusdt@trade` (configurable in code).
     - Deserializes JSON events into `NormalizedMarketData` using `serde_json`.
-    - Includes automatic reconnection logic with exponential backoff strategies.- **RedpandaProducer**: Handles publishing to Redpanda topics partitioned by symbol.
+    - Includes automatic reconnection logic with exponential backoff strategies.
+- **RedpandaProducer**: Reliable publisher using the pure-Rust `kafka` crate.
+    - Runs in a blocking task to ensure delivery without blocking the async runtime.
+    - Partitions messages by `symbol_id`.
+    - Serializes data to JSON.
 
 ## Usage
 
 ### Prerequisites
 - Rust (latest stable)
-- Redpanda / Kafka (optional for dry-run, required for prod)
+- Redpanda / Kafka (Localhost:9092 recommended, but optional for Ingestion-Only testing)
 
 ### Build
 ```bash

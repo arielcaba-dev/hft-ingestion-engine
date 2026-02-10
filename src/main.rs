@@ -72,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 4. Start Processing Thread (RingBuffer -> Normalizer/Producer)
     // This is the "Consumer" of the RingBuffer.
     let redpanda_config = settings.redpanda.clone();
-    let producer = crate::producers::RedpandaProducer::new(redpanda_config);
+    let mut producer = crate::producers::RedpandaProducer::new(redpanda_config);
 
     // We spin-loop efficiently on the RingBuffer
     std::thread::spawn(move || {
@@ -81,11 +81,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .build()
             .unwrap();
         rt.block_on(async {
+            if let Err(e) = producer.initialize().await {
+                log::warn!("WARNING: Failed to initialize Redpanda Producer: {}. Continuing in ingestion-only mode (messages will be dropped).", e);
+            }
             loop {
                 if let Some(data) = rb_consumer.pop() {
                     // Normalize (already mostly done in connector in this simple example, but typically here)
                     // Publish
-                    let _ = producer.send(&settings.redpanda.topic_prefix, &data).await;
+                    if let Err(e) = producer.send(&settings.redpanda.topic_prefix, &data).await {
+                        log::debug!("Failed to send to Redpanda: {}", e);
+                    }
                 } else {
                     // Backoff strategy (e.g., spin for a bit, then sleep)
                     std::thread::yield_now();
