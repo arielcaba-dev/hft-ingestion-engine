@@ -17,11 +17,12 @@ pub trait ExchangeConnector {
 
 pub struct BinanceConnector {
     config: ExchangeConfig,
+    symbols: Vec<crate::config::SymbolConfig>,
 }
 
 impl BinanceConnector {
-    pub fn new(config: ExchangeConfig) -> Self {
-        Self { config }
+    pub fn new(config: ExchangeConfig, symbols: Vec<crate::config::SymbolConfig>) -> Self {
+        Self { config, symbols }
     }
 
     async fn handle_connection(
@@ -34,15 +35,31 @@ impl BinanceConnector {
         let (mut ws_stream, _) = connect_async(url).await?;
         info!("Connected to Binance WebSocket");
 
-        // Subscribe to trade channel (hardcoded for MVP demo)
-        // In a real app, we would iterate over self.config.symbols or similar
+        // Dynamic subscription
+        let mut streams = vec![];
+        let mut symbol_map = std::collections::HashMap::new();
+
+        for s in &self.symbols {
+            if let Some(remote_id) = s.exchange_mappings.get("binance") {
+                // Binance WebSocket streams are lowercase
+                streams.push(format!("{}@trade", remote_id.to_lowercase()));
+                // Map remote_id (uppercase) -> internal_id
+                symbol_map.insert(remote_id.clone(), s.internal_id.clone());
+            }
+        }
+
+        if streams.is_empty() {
+            warn!("No symbols configured for Binance connector");
+            return Ok(());
+        }
+
         let subscribe_msg = json!({
             "method": "SUBSCRIBE",
-            "params": [
-                "btcusdt@trade"
-            ],
+            "params": streams,
             "id": 1
         });
+
+        info!("Subscribing to: {:?}", streams);
 
         ws_stream
             .send(Message::Text(subscribe_msg.to_string()))
@@ -56,8 +73,19 @@ impl BinanceConnector {
                     // trace!("Received: {}", text);
                     if let Ok(event) = serde_json::from_str::<BinanceTradeEvent>(&text) {
                         if event.e == "trade" {
+                            // Binance returns uppercase symbol in payload 's' usually, but let's be careful.
+                            // The 's' field in trade payload is e.g. "BNBBTC".
+                            // Our map has "BNBBTC" -> "BNB-BTC".
+
+                            let internal_id =
+                                symbol_map.get(&event._symbol).cloned().unwrap_or_else(|| {
+                                    // Fallback or log warning? For now, use the raw symbol if not found or "UNKNOWN"
+                                    warn!("Unknown symbol received: {}", event._symbol);
+                                    format!("UNKNOWN-{}", event._symbol)
+                                });
+
                             let data = NormalizedMarketData {
-                                symbol_id: "BTC-USD".to_string(), // Simplified mapping
+                                symbol_id: internal_id,
                                 exchange: "binance".to_string(),
                                 event_type: MarketEventType::Trade,
                                 price: event.p.parse().unwrap_or(0.0),
@@ -141,5 +169,41 @@ mod tests {
         assert_eq!(event.p, "0.001");
         assert_eq!(event.q, "100");
         assert_eq!(event.trade_time, 123456785);
+    }
+
+    #[test]
+    fn test_dynamic_symbol_mapping() {
+        use crate::config::SymbolConfig;
+        use std::collections::HashMap;
+
+        let symbols = vec![
+            SymbolConfig {
+                internal_id: "BTC-USD".to_string(),
+                exchange_mappings: HashMap::from([("binance".to_string(), "BTCUSDT".to_string())]),
+            },
+            SymbolConfig {
+                internal_id: "ETH-USD".to_string(),
+                exchange_mappings: HashMap::from([("binance".to_string(), "ETHUSDT".to_string())]),
+            },
+        ];
+
+        // Simulate the logic inside handle_connection
+        let mut streams = vec![];
+        let mut symbol_map = HashMap::new();
+
+        for s in &symbols {
+            if let Some(remote_id) = s.exchange_mappings.get("binance") {
+                streams.push(format!("{}@trade", remote_id.to_lowercase()));
+                symbol_map.insert(remote_id.clone(), s.internal_id.clone());
+            }
+        }
+
+        assert_eq!(streams.len(), 2);
+        assert!(streams.contains(&"btcusdt@trade".to_string()));
+        assert!(streams.contains(&"ethusdt@trade".to_string()));
+
+        assert_eq!(symbol_map.get("BTCUSDT"), Some(&"BTC-USD".to_string()));
+        assert_eq!(symbol_map.get("ETHUSDT"), Some(&"ETH-USD".to_string()));
+        assert_eq!(symbol_map.get("UNKNOWN"), None);
     }
 }

@@ -55,7 +55,22 @@ impl Settings {
                 brokers: "localhost:9092".to_string(),
                 topic_prefix: "market_data".to_string(),
             },
-            symbols: vec![],
+            symbols: vec![
+                SymbolConfig {
+                    internal_id: "BTC-USD".to_string(),
+                    exchange_mappings: HashMap::from([(
+                        "binance".to_string(),
+                        "BTCUSDT".to_string(),
+                    )]),
+                },
+                SymbolConfig {
+                    internal_id: "ETH-USD".to_string(),
+                    exchange_mappings: HashMap::from([(
+                        "binance".to_string(),
+                        "ETHUSDT".to_string(),
+                    )]),
+                },
+            ],
         };
 
         Ok(default_settings)

@@ -32,7 +32,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         api_key: None,
         api_secret: None,
     };
-    let mut connector = crate::connectors::BinanceConnector::new(binance_config);
+    let mut connector =
+        crate::connectors::BinanceConnector::new(binance_config, settings.symbols.clone());
 
     tokio::spawn(async move {
         connector.run(tx).await;
