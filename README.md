@@ -30,8 +30,11 @@ Located in `src/model.rs` and `src/normalizers/`.
 
 ### 4. Connectors & Producers
 - Modular traits `ExchangeConnector` and `MessageProducer` allow easy extension.
-- **BinanceConnector**: Implements WebSocket connection logic with formatting for Binance.
-- **RedpandaProducer**: Handles publishing to Redpanda topics partitioned by symbol.
+- **BinanceConnector**: Production-ready WebSocket implementation using `tokio-tungstenite`.
+    - Connects to `wss://stream.binance.com:9443/ws`.
+    - Auto-subscribes to `btcusdt@trade` (configurable in code).
+    - Deserializes JSON events into `NormalizedMarketData` using `serde_json`.
+    - Includes automatic reconnection logic with exponential backoff strategies.- **RedpandaProducer**: Handles publishing to Redpanda topics partitioned by symbol.
 
 ## Usage
 
