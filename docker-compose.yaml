@@ -1,0 +1,110 @@
+version: "3.9"
+
+services:
+  # PostgreSQL - Arroyo metadata storage
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    environment:
+      POSTGRES_DB: arroyo
+      POSTGRES_USER: arroyo
+      POSTGRES_PASSWORD: arroyo
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - arroyo-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arroyo"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redpanda - Kafka-compatible message broker
+  redpanda:
+    image: redpandadata/redpanda:v23.3.1
+    container_name: redpanda
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr redpanda:33145
+      - --advertise-rpc-addr redpanda:33145
+      - --mode dev-container
+    ports:
+      - "18081:18081"  # Schema Registry
+      - "18082:18082"  # Pandaproxy
+      - "19092:19092"  # Kafka
+      - "19644:9644"   # Admin API
+    networks:
+      - arroyo-net
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Arroyo API - Web UI server
+  arroyo-api:
+    image: ghcr.io/arroyosystems/arroyo:latest
+    container_name: arroyo-api
+    command: api
+    environment:
+      DATABASE_URL: postgresql://arroyo:arroyo@postgres:5432/arroyo
+      ARROYO_CONTROLLER_ADDR: arroyo-controller:5116
+      RUST_LOG: info
+    ports:
+      - "5115:5115"  # Web UI
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    networks:
+      - arroyo-net
+
+  # Arroyo Controller - API server and web UI
+  arroyo-controller:
+    image: ghcr.io/arroyosystems/arroyo:latest
+    container_name: arroyo-controller
+    command: controller
+    environment:
+      DATABASE_URL: postgresql://arroyo:arroyo@postgres:5432/arroyo
+      ARROYO_CONTROLLER_ADDR: 0.0.0.0:9190
+      RUST_LOG: info
+    ports:
+      - "5114:5114"  # HTTP Admin API
+      - "5116:5116"  # gRPC Controller API
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    networks:
+      - arroyo-net
+
+  # Arroyo Worker - Query execution engine
+  arroyo-worker:
+    image: ghcr.io/arroyosystems/arroyo:latest
+    container_name: arroyo-worker
+    command: worker
+    environment:
+      DATABASE_URL: postgresql://arroyo:arroyo@postgres:5432/arroyo
+      ARROYO_CONTROLLER_ADDR: arroyo-controller:5116
+      RUST_LOG: info
+    depends_on:
+      - arroyo-controller
+    networks:
+      - arroyo-net
+
+volumes:
+  postgres_data:
+
+networks:
+  arroyo-net:
+    driver: bridge
