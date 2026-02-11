@@ -1,0 +1,26 @@
+# RisingWave v2.7.2 Configuration
+
+[meta]
+# Backend configuration for meta node
+backend = "Sql"
+
+# Hummock state store configuration
+[hummock]
+state_store = "hummock+s3://humpback"
+data_directory = "hummock"
+
+# Object storage configuration
+[storage]
+[storage.object_store]
+type = "s3"
+
+[storage.object_store.s3]
+bucket = "humpback"
+endpoint_url = "http://minio:9000"
+region = "us-east-1"
+# Force path-style for MinIO compatibility
+force_path_style = true
+
+[[storage.object_store.s3.credential]]
+access_key_id = "minioadmin"
+secret_access_key = "minioadmin"

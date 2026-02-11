@@ -1,0 +1,146 @@
+version: "3"
+services:
+  redpanda:
+    image: redpandadata/redpanda:v23.3.1
+    container_name: redpanda
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr redpanda:33145
+      - --advertise-rpc-addr redpanda:33145
+      - --mode dev-container
+    ports:
+      - "18081:18081"
+      - "18082:18082"
+      - "19092:19092"
+      - "19644:9644"
+    networks:
+      - risingwave
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    container_name: etcd
+    command: etcd -advertise-client-urls http://0.0.0.0:2379 -listen-client-urls http://0.0.0.0:2379
+    networks:
+      - risingwave
+
+  minio:
+    image: minio/minio:RELEASE.2024-01-18T22-51-28Z
+    container_name: minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_REGION: us-east-1
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - risingwave
+
+  minio-init:
+    image: minio/mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set minio http://minio:9000 minioadmin minioadmin; do echo '...waiting...' && sleep 1; done;
+      mc mb -p minio/humpback;
+      mc mb -p minio/hft-datalake;
+      exit 0;
+      "
+    networks:
+      - risingwave
+
+  risingwave-meta:
+    image: risingwavelabs/risingwave:v2.7.2
+    container_name: risingwave-meta
+    command: >
+      meta-node
+      --listen-addr 0.0.0.0:5690
+      --advertise-addr risingwave-meta:5690
+      --dashboard-host 0.0.0.0:5691
+      --config-path /risingwave.toml
+    volumes:
+      - ./risingwave/risingwave.toml:/risingwave.toml:ro
+    environment:
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
+      RISINGWAVE_S3_ENDPOINT: http://minio:9000
+      RW_IS_FORCE_PATH_STYLE: 'true'
+    depends_on:
+      - etcd
+      - minio
+      - minio-init
+    ports:
+      - "5691:5691"
+    networks:
+      - risingwave
+
+  risingwave-compute:
+    image: risingwavelabs/risingwave:v2.7.2
+    container_name: risingwave-compute
+    command: >
+      compute-node
+      --listen-addr 0.0.0.0:5688
+      --advertise-addr risingwave-compute:5688
+      --meta-address http://risingwave-meta:5690
+      --config-path /risingwave.toml
+    volumes:
+      - ./risingwave/risingwave.toml:/risingwave.toml:ro
+    environment:
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
+      RISINGWAVE_S3_ENDPOINT: http://minio:9000
+      RW_IS_FORCE_PATH_STYLE: 'true'
+      AWS_S3_USE_PATH_STYLE: 'true'
+    depends_on:
+      - risingwave-meta
+      - risingwave-connector
+    networks:
+      - risingwave
+
+  risingwave-connector:
+    image: risingwavelabs/risingwave:v2.7.2
+    container_name: risingwave-connector
+    command: >
+      connector-node
+      --listen-addr 0.0.0.0:6666
+      --advertise-addr risingwave-connector:6666
+      --meta-addr http://risingwave-meta:5690
+    depends_on:
+      - risingwave-meta
+    networks:
+      - risingwave
+
+  risingwave-frontend:
+    image: risingwavelabs/risingwave:v2.7.2
+    container_name: risingwave-frontend
+    command: >
+      frontend-node
+      --listen-addr 0.0.0.0:4566
+      --advertise-addr risingwave-frontend:4566
+      --meta-addr http://risingwave-meta:5690
+    ports:
+      - "4566:4566"
+      - "5432:4566" # Expose Postgres port
+    environment:
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
+      RISINGWAVE_S3_ENDPOINT: http://minio:9000
+    depends_on:
+      - risingwave-meta
+    networks:
+      - risingwave
+
+networks:
+  risingwave:
+    driver: bridge
