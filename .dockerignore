@@ -1,0 +1,8 @@
+target/
+.git/
+.gitignore
+docker-compose.yaml
+README.md
+scripts/
+arroyo/
+*.log

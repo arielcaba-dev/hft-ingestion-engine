@@ -1,77 +1,148 @@
 version: "3.9"
 
 services:
-  # PostgreSQL - Arroyo metadata storage
-  postgres:
-    image: postgres:15-alpine
-    container_name: postgres
-    environment:
-      POSTGRES_DB: arroyo
-      POSTGRES_USER: arroyo
-      POSTGRES_PASSWORD: arroyo
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - arroyo-net
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U arroyo"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  # Redpanda - Kafka-compatible message broker
+  # --------------------------------------------------------------------------
+  # REDPANDA (Kafka Broker)
+  # --------------------------------------------------------------------------
   redpanda:
     image: redpandadata/redpanda:v23.3.1
     container_name: redpanda
     command:
       - redpanda
       - start
-      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
-      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:${REDPANDA_PORT}
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:${REDPANDA_PORT}
       - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
       - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:18082
-      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:${REDPANDA_SCHEMA_REGISTRY_PORT}
       - --rpc-addr redpanda:33145
       - --advertise-rpc-addr redpanda:33145
       - --mode dev-container
     ports:
-      - "18081:18081"  # Schema Registry
-      - "18082:18082"  # Pandaproxy
-      - "19092:19092"  # Kafka
-      - "19644:9644"   # Admin API
+      - "${REDPANDA_PORT}:${REDPANDA_PORT}"
+      - "${REDPANDA_SCHEMA_REGISTRY_PORT}:${REDPANDA_SCHEMA_REGISTRY_PORT}"
+      - "${REDPANDA_ADMIN_PORT}:9644"
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
     networks:
-      - arroyo-net
+      - crypto_net
     healthcheck:
-      test: ["CMD-SHELL", "rpk cluster health"]
+      test: [ "CMD-SHELL", "rpk cluster health" ]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Arroyo - Single node cluster (all-in-one)
+  # --------------------------------------------------------------------------
+  # REDPANDA INIT (Topic Creation)
+  # --------------------------------------------------------------------------
+  init-redpanda:
+    image: redpandadata/redpanda:v23.3.1
+    container_name: init-redpanda
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint: /bin/sh
+    command: -c "echo 'Waiting for Redpanda...'; sleep 5; rpk topic create market_data_raw -r 1 -p 4 --brokers redpanda:9092; rpk topic create ohlcv_1m -r 1 -p 1 --brokers redpanda:9092; rpk topic create metrics_derived -r 1 -p 1 --brokers redpanda:9092; echo 'Topics created';"
+    networks:
+      - crypto_net
+
+  # --------------------------------------------------------------------------
+  # POSTGRES (Arroyo Metadata)
+  # --------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - crypto_net
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # --------------------------------------------------------------------------
+  # ARROYO (Streaming SQL Engine)
+  # --------------------------------------------------------------------------
   arroyo:
     image: ghcr.io/arroyosystems/arroyo:latest
     container_name: arroyo
     command: cluster
     environment:
-      DATABASE_URL: postgresql://arroyo:arroyo@postgres:5432/arroyo
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
       RUST_LOG: info
     ports:
-      - "5115:5115"  # Web UI
-      - "8001:8001"  # Prometheus metrics
+      - "${ARROYO_UI_PORT}:5115"
+      - "${ARROYO_METRICS_PORT}:8001"
     depends_on:
       postgres:
         condition: service_healthy
       redpanda:
         condition: service_healthy
     networks:
-      - arroyo-net
+      - crypto_net
 
+  # --------------------------------------------------------------------------
+  # QUESTDB (Time-Series Database)
+  # --------------------------------------------------------------------------
+  questdb:
+    image: questdb/questdb:latest
+    container_name: questdb
+    ports:
+      - "${QUESTDB_UI_PORT}:9000"
+      - "${QUESTDB_ILP_PORT}:9009"
+      - "${QUESTDB_PG_PORT}:8812"
+    environment:
+      QDB_CAIRO_COMMIT_LAG: 1000
+      QDB_CAIRO_MAX_UNCOMMITTED_ROWS: 1000
+    volumes:
+      - questdb_data:/root/.questdb
+    networks:
+      - crypto_net
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --spider http://localhost:9003/ping || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  # --------------------------------------------------------------------------
+  # INGESTION ENGINE (Built from source)
+  # --------------------------------------------------------------------------
+  ingestion-engine:
+    build: .
+    container_name: ingestion-engine
+    environment:
+      RUST_LOG: info
+      # Config crate with prefix "APP" and separator "__"
+      # APP_REDPANDA__BROKERS -> redpanda.brokers
+      # APP_REDPANDA__TOPIC_PREFIX -> redpanda.topic_prefix
+      APP_REDPANDA__BROKERS: "redpanda:9092"
+      APP_REDPANDA__TOPIC_PREFIX: "market_data_raw"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      init-redpanda:
+        condition: service_started
+    networks:
+      - crypto_net
+    healthcheck:
+      test: [ "CMD-SHELL", "pidof hft-ingestion-engine || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
 volumes:
+  redpanda_data:
   postgres_data:
+  questdb_data:
+
 
 networks:
-  arroyo-net:
+  crypto_net:
     driver: bridge

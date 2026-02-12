@@ -35,44 +35,50 @@ impl Settings {
     pub fn new() -> Result<Self, config::ConfigError> {
         let _run_mode = std::env::var("RUN_MODE").unwrap_or_else(|_| "development".into());
 
-        let _s = Config::builder()
-            // Start with a default configuration (could also be a file)
-            // .add_source(File::with_name("config/default"))
+        // Use TOML string for defaults to handle nested structures correctly
+        let default_config = r#"
+            [exchanges.binance]
+            name = "Binance"
+            type_code = "binance"
+            websocket_url = "wss://stream.binance.com:9443/ws"
+
+            [redpanda]
+            brokers = "localhost:19092"
+            topic_prefix = "market_data_raw"
+
+            [[symbols]]
+            internal_id = "BTC-USD"
+            [symbols.exchange_mappings]
+            binance = "BTCUSDT"
+
+            [[symbols]]
+            internal_id = "ETH-USD"
+            [symbols.exchange_mappings]
+            binance = "ETHUSDT"
+        "#;
+
+        let s = Config::builder()
+            .add_source(config::File::from_str(
+                default_config,
+                config::FileFormat::Toml,
+            ))
             // Add in settings from the environment (with a prefix of APP)
-            // E.g. `APP_DEBUG=1` would set the `debug` key
-            .add_source(config::Environment::with_prefix("APP"))
+            // E.g. `APP_REDPANDA__BROKERS=redpanda:9092` overrides `redpanda.brokers`
+            .add_source(config::Environment::with_prefix("APP").separator("__"))
+            // Manual overrides because config-rs 0.13 has case-sensitivity issues with env vars
+            .set_override(
+                "redpanda.brokers",
+                std::env::var("APP_REDPANDA__BROKERS")
+                    .unwrap_or_else(|_| "localhost:19092".to_string()),
+            )?
+            .set_override(
+                "redpanda.topic_prefix",
+                std::env::var("APP_REDPANDA__TOPIC_PREFIX")
+                    .unwrap_or_else(|_| "market_data_raw".to_string()),
+            )?
             .build()?;
 
-        // For now, since we don't have a config file in the environment, we might fail here if we rely solely on file.
-        // I will return a mock config or expect a file if one is provided.
-        // But to make it runnable without external config file for now, I'll use a hardcoded default or builder pattern if needed.
-        // However, standard pattern is to load from file. let's assume a config.toml exists or use defaults.
-
-        // Constructing a default config for demonstration purposes
-        let default_settings = Settings {
-            exchanges: HashMap::new(),
-            redpanda: RedpandaConfig {
-                brokers: "localhost:19092".to_string(),
-                topic_prefix: "market_data_raw".to_string(),
-            },
-            symbols: vec![
-                SymbolConfig {
-                    internal_id: "BTC-USD".to_string(),
-                    exchange_mappings: HashMap::from([(
-                        "binance".to_string(),
-                        "BTCUSDT".to_string(),
-                    )]),
-                },
-                SymbolConfig {
-                    internal_id: "ETH-USD".to_string(),
-                    exchange_mappings: HashMap::from([(
-                        "binance".to_string(),
-                        "ETHUSDT".to_string(),
-                    )]),
-                },
-            ],
-        };
-
-        Ok(default_settings)
+        // Deserialize configuration
+        s.try_deserialize()
     }
 }
