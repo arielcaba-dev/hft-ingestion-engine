@@ -1,7 +1,8 @@
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct NormalizedMarketData {
     pub symbol_id: String,
     pub exchange: String,
@@ -16,6 +17,7 @@ pub struct NormalizedMarketData {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
 pub enum MarketEventType {
     Trade,
     Quote, // Best Bid/Ask

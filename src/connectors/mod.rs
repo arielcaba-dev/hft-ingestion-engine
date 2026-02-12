@@ -70,7 +70,7 @@ impl BinanceConnector {
             let msg = msg?;
             match msg {
                 Message::Text(text) => {
-                    // trace!("Received: {}", text);
+                    info!("Received raw message: {}", text);
                     if let Ok(event) = serde_json::from_str::<BinanceTradeEvent>(&text) {
                         if event.e == "trade" {
                             // Binance returns uppercase symbol in payload 's' usually, but let's be careful.
@@ -101,8 +101,8 @@ impl BinanceConnector {
                             }
                         }
                     } else {
-                        // Handle other messages (ping/pong handled by tungstenite implicitly, or subscription responses)
-                        // warn!("Failed to parse or unknown message: {}", text);
+                        // Handle other messages (ping/pong, subscription responses)
+                        info!("Received non-trade message: {}", text);
                     }
                 }
                 Message::Ping(_) | Message::Pong(_) => {}
