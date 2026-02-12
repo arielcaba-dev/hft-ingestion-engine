@@ -69,10 +69,12 @@ services:
       retries: 5
 
   # --------------------------------------------------------------------------
-  # ARROYO (Streaming SQL Engine)
+  # ARROYO (Streaming SQL Engine with Custom Worker)
   # --------------------------------------------------------------------------
   arroyo:
-    image: ghcr.io/arroyosystems/arroyo:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
     container_name: arroyo
     command: cluster
     environment:
@@ -86,6 +88,9 @@ services:
         condition: service_healthy
       redpanda:
         condition: service_healthy
+    volumes:
+      # Persist cargo cache across rebuilds
+      - cargo_cache:/root/.cargo/registry
     networks:
       - crypto_net
 
@@ -137,10 +142,33 @@ services:
       timeout: 5s
       retries: 3
 
+  # --------------------------------------------------------------------------
+  # QUESTDB BRIDGE (Python Kafka -> QuestDB ILP)
+  # --------------------------------------------------------------------------
+  questdb-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile.bridge
+    container_name: questdb-bridge
+    restart: always
+    environment:
+      KAFKA_BROKER: "redpanda:9092"
+      QUESTDB_HOST: "questdb"
+      QUESTDB_PORT: "9009"
+      TOPIC: "market_data_raw"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      questdb:
+        condition: service_healthy
+    networks:
+      - crypto_net
+
 volumes:
   redpanda_data:
   postgres_data:
   questdb_data:
+  cargo_cache:
 
 
 networks:

@@ -1,0 +1,33 @@
+# ==============================================================================
+# Custom Arroyo Worker with Pre-installed Build Tools & Cached Dependencies
+# Purpose: Eliminate UDF compilation timeouts by baking dependencies into image
+# ==============================================================================
+
+# Use the official Arroyo image as base
+FROM ghcr.io/arroyosystems/arroyo:latest AS base
+
+# Switch to root to install system dependencies
+USER root
+
+# 1. Install Build Dependencies (Clang is critical for questdb-rs/bindgen)
+# We also clean up apt cache to keep image size down
+RUN apt-get update && \
+    apt-get install -y \
+    clang \
+    libclang-dev \
+    lld \
+    pkg-config \
+    libssl-dev \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# 3. Environment Setup
+# Ensure clang is in the path for bindgen
+# Note: Adjust llvm version based on what apt-get installs (usually 14 or 15)
+ENV LIBCLANG_PATH=/usr/lib/llvm-14/lib
+ENV LLVM_CONFIG_PATH=/usr/bin/llvm-config-14
+
+# Switch back to arroyo user if the base image uses one
+# USER arroyo
+
+# Use the default entrypoint and command from base image
