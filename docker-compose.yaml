@@ -49,17 +49,17 @@ services:
       timeout: 5s
       retries: 5
 
-  # Arroyo API - Web UI server
-  arroyo-api:
+  # Arroyo - Single node cluster (all-in-one)
+  arroyo:
     image: ghcr.io/arroyosystems/arroyo:latest
-    container_name: arroyo-api
-    command: api
+    container_name: arroyo
+    command: cluster
     environment:
       DATABASE_URL: postgresql://arroyo:arroyo@postgres:5432/arroyo
-      ARROYO_CONTROLLER_ADDR: arroyo-controller:5116
       RUST_LOG: info
     ports:
       - "5115:5115"  # Web UI
+      - "8001:8001"  # Prometheus metrics
     depends_on:
       postgres:
         condition: service_healthy
@@ -68,39 +68,6 @@ services:
     networks:
       - arroyo-net
 
-  # Arroyo Controller - API server and web UI
-  arroyo-controller:
-    image: ghcr.io/arroyosystems/arroyo:latest
-    container_name: arroyo-controller
-    command: controller
-    environment:
-      DATABASE_URL: postgresql://arroyo:arroyo@postgres:5432/arroyo
-      ARROYO_CONTROLLER_ADDR: 0.0.0.0:9190
-      RUST_LOG: info
-    ports:
-      - "5114:5114"  # HTTP Admin API
-      - "5116:5116"  # gRPC Controller API
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redpanda:
-        condition: service_healthy
-    networks:
-      - arroyo-net
-
-  # Arroyo Worker - Query execution engine
-  arroyo-worker:
-    image: ghcr.io/arroyosystems/arroyo:latest
-    container_name: arroyo-worker
-    command: worker
-    environment:
-      DATABASE_URL: postgresql://arroyo:arroyo@postgres:5432/arroyo
-      ARROYO_CONTROLLER_ADDR: arroyo-controller:5116
-      RUST_LOG: info
-    depends_on:
-      - arroyo-controller
-    networks:
-      - arroyo-net
 
 volumes:
   postgres_data:

@@ -15,23 +15,11 @@ echo "Producing mock data..."
 for i in {1..10}; do
   TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S.%3NZ")
   PRICE=$(echo "50000 + $RANDOM % 1000" | bc)
-  QUANTITY=$(echo "scale=4; $RANDOM / 32767" | bc)
+  # Ensure leading zero for decimals (0.9183 not .9183)
+  QUANTITY=$(printf "%.4f" $(echo "scale=4; $RANDOM / 32767" | bc))
   
-  JSON_DATA=$(cat <<EOF
-{
-  "symbol_id": "BTC-USD",
-  "exchange": "COINBASE",
-  "event_type": "trade",
-  "price": $PRICE,
-  "quantity": $QUANTITY,
-  "tags": ["live", "spot"],
-  "time_exchange": "$TIMESTAMP",
-  "time_ingest": "$TIMESTAMP",
-  "is_snapshot": false,
-  "sequence": $i
-}
-EOF
-)
+  # Create single-line JSON - CRITICAL: must be one line per message
+  JSON_DATA="{\"symbol_id\":\"BTC-USD\",\"exchange\":\"COINBASE\",\"event_type\":\"trade\",\"price\":$PRICE,\"quantity\":$QUANTITY,\"tags\":[\"live\",\"spot\"],\"time_exchange\":\"$TIMESTAMP\",\"time_ingest\":\"$TIMESTAMP\",\"is_snapshot\":false,\"sequence\":$i}"
   
   echo "$JSON_DATA" | docker exec -i redpanda rpk topic produce $TOPIC --brokers $BROKER
   echo "Produced trade $i: BTC-USD @ \$$PRICE, qty: $QUANTITY"

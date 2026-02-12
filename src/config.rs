@@ -52,8 +52,8 @@ impl Settings {
         let default_settings = Settings {
             exchanges: HashMap::new(),
             redpanda: RedpandaConfig {
-                brokers: "localhost:9092".to_string(),
-                topic_prefix: "market_data".to_string(),
+                brokers: "localhost:19092".to_string(),
+                topic_prefix: "market_data_raw".to_string(),
             },
             symbols: vec![
                 SymbolConfig {

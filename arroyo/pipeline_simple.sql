@@ -17,7 +17,8 @@ CREATE TABLE market_data_raw (
     type = 'source',
     bootstrap_servers = 'redpanda:9092',
     topic = 'market_data_raw',
-    format = 'json'
+    format = 'json',
+    'source.offset' = 'earliest'
 );
 
 -- OHLCV 1-second bars
