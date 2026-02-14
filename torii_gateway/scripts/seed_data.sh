@@ -6,7 +6,11 @@ done
 
 # Insert Test User
 echo "Seeding Test User..."
-USER_ID=$(docker exec -i postgres psql -U arroyo -d arroyo -t -c "INSERT INTO users (email) VALUES ('test_user@example.com') RETURNING id;" | tr -d '[:space:]')
+USER_ID=$(docker exec -i postgres psql -U arroyo -d arroyo -t -q -c "INSERT INTO users (email) VALUES ('test_user@example.com') ON CONFLICT (email) DO UPDATE SET email=EXCLUDED.email RETURNING id;" | head -n 1 | tr -d '[:space:]')
+if [ -z "$USER_ID" ]; then
+    # Fallback to select if update didn't return (though it should)
+    USER_ID=$(docker exec -i postgres psql -U arroyo -d arroyo -t -q -c "SELECT id FROM users WHERE email='test_user@example.com';" | head -n 1 | tr -d '[:space:]')
+fi
 echo "Created User ID: $USER_ID"
 
 # Generate API Key (simple hash for demo)

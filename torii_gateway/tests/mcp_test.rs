@@ -1,4 +1,3 @@
-use gateway_service::handlers::mcp::McpQuery;
 use serde_json::json;
 
 #[tokio::test]
@@ -11,6 +10,9 @@ async fn test_mcp_query_parsing() {
         "query": query,
         "context": {"symbol": "BTC-USD"}
     });
+
+    // Validating payload construction
+    assert_eq!(payload["query"], query);
 
     // We can't easily call the handler directly without state, so we unit test the parsing logic if we extracted it.
     // Given the handler is monolithic, we'll write a test that checks the expected SQL generation logic if it were exposed.

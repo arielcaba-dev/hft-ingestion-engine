@@ -28,7 +28,8 @@ pub async fn rate_limit_middleware(
         .as_millis() as u64;
 
     // Pipeline: Remove old -> Count -> Add new
-    let (count,): (isize,) = redis::pipe()
+    // Pipeline: Remove old -> Count
+    let (_, count): (isize, isize) = redis::pipe()
         .zrembyscore(&key, "-inf", now_ms - window_ms)
         .zcount(&key, now_ms - window_ms, now_ms)
         .query_async(&mut redis_conn)
