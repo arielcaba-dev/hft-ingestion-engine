@@ -33,14 +33,36 @@ impl Billing {
 
         // Atomic check and deduct
         // This is a simple implementation. For production, use Lua script to ensure non-negative.
-        let current: Option<i32> = conn.get(&key).await?;
-        let current = current.unwrap_or(0);
+        let current: Option<i32> = conn.get(&key).await.unwrap_or(None);
+
+        // If Redis is empty, fetch from DB
+        let current = match current {
+            Some(v) => v,
+            None => {
+                use sqlx::Row;
+                let row = sqlx::query(
+                    "SELECT credits_remaining FROM user_subscriptions WHERE user_id = $1",
+                )
+                .bind(user_id)
+                .fetch_optional(&state.db)
+                .await
+                .map_err(AppError::Database)?;
+
+                let balance: i32 = row
+                    .and_then(|r| r.try_get("credits_remaining").ok())
+                    .unwrap_or(0);
+
+                // Cache it
+                let _: () = conn.set(&key, balance).await.map_err(AppError::Redis)?;
+                balance
+            }
+        };
 
         if current < cost {
             return Err(AppError::PaymentRequired("Insufficient credits".into()));
         }
 
-        let _: i32 = conn.decr(&key, cost).await?;
+        let _: i32 = conn.decr(&key, cost).await.map_err(AppError::Redis)?;
 
         // Async log to DB (fire and forget for latency, or spawn task)
         let state_clone = state.clone();

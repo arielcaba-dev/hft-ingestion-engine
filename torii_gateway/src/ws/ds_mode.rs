@@ -50,7 +50,14 @@ async fn handle_ds_socket(socket: WebSocket, state: Arc<AppState>) {
 
         loop {
             // Poll for messages
-            for ms in consumer.poll().unwrap().iter() {
+            let poll_result = consumer.poll();
+            if let Err(e) = poll_result {
+                eprintln!("Kafka poll failed: {}", e);
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                continue;
+            }
+
+            for ms in poll_result.unwrap().iter() {
                 for _m in ms.messages() {
                     // In a real scenario, 'm.value' is the source data.
                     // We need to parse it (if it's JSON/Bincode) and re-serialize to Protobuf.

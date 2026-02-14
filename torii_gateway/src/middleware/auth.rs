@@ -16,13 +16,28 @@ impl FromRequestParts<Arc<AppState>> for AuthContext {
         parts: &mut Parts,
         state: &Arc<AppState>,
     ) -> Result<Self, Self::Rejection> {
-        // 1. Extract API Key (Header: X-API-KEY)
-        let api_key = parts
+        // 1. Extract API Key (Header: X-API-KEY or Query Param: api_key)
+        let mut api_key = parts
             .headers
             .get("X-API-KEY")
-            .ok_or_else(|| AppError::Unauthorized("Missing X-API-KEY header".into()))?
-            .to_str()
-            .map_err(|_| AppError::Unauthorized("Invalid API Key format".into()))?;
+            .map(|v| v.to_str().unwrap_or_default().to_string());
+
+        if api_key.is_none() {
+            if let Some(query) = parts.uri.query() {
+                for pair in query.split('&') {
+                    if let Some((key, value)) = pair.split_once('=') {
+                        if key == "api_key" {
+                            api_key = Some(value.to_string());
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        let api_key = api_key.ok_or_else(|| {
+            AppError::Unauthorized("Missing X-API-KEY header or query param".into())
+        })?;
 
         // 2. Hash Key
         let mut hasher = Sha256::new();
