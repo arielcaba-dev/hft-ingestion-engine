@@ -3,7 +3,7 @@ use crate::error::AppError;
 use crate::model::AuthContext;
 use crate::AppState;
 use axum::{extract::State, response::IntoResponse, Json};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
 

@@ -5,7 +5,6 @@ use axum::{
     body::Body,
     http::{Request, Response},
     middleware::Next,
-    response::IntoResponse,
 };
 use redis::AsyncCommands;
 use std::sync::Arc;

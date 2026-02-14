@@ -1,4 +1,3 @@
-use crate::model::AuthContext;
 use crate::AppState;
 use axum::{
     extract::{
@@ -8,7 +7,7 @@ use axum::{
     response::IntoResponse,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
-use kafka::consumer::{Consumer, FetchOffset, GroupOffsetStorage};
+use kafka::consumer::{Consumer, FetchOffset};
 use prost::Message as ProstMessage;
 use std::sync::Arc; // Rename to avoid conflict with axum Message
 
@@ -24,7 +23,7 @@ pub async fn ds_handler(
     ws.on_upgrade(move |socket| handle_ds_socket(socket, state))
 }
 
-async fn handle_ds_socket(mut socket: WebSocket, state: Arc<AppState>) {
+async fn handle_ds_socket(socket: WebSocket, state: Arc<AppState>) {
     let (mut sender, _receiver) = socket.split();
 
     // Create a channel to bridge blocking Kafka thread and Async WebSocket
@@ -52,7 +51,7 @@ async fn handle_ds_socket(mut socket: WebSocket, state: Arc<AppState>) {
         loop {
             // Poll for messages
             for ms in consumer.poll().unwrap().iter() {
-                for m in ms.messages() {
+                for _m in ms.messages() {
                     // In a real scenario, 'm.value' is the source data.
                     // We need to parse it (if it's JSON/Bincode) and re-serialize to Protobuf.
                     // Or if source is already Protobuf, pass through.

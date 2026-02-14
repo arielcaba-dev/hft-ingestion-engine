@@ -1,15 +1,9 @@
 use crate::error::AppError;
 use crate::model::AuthContext;
 use crate::AppState;
-use axum::{
-    async_trait,
-    extract::FromRequestParts,
-    http::{request::Parts, StatusCode},
-    RequestPartsExt,
-};
+use axum::{async_trait, extract::FromRequestParts, http::request::Parts};
 
 use redis::AsyncCommands;
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use uuid::Uuid;

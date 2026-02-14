@@ -1,6 +1,4 @@
-use crate::billing::Billing;
 use crate::error::AppError;
-use crate::model::AuthContext;
 use crate::AppState;
 use axum::{
     extract::{
@@ -10,12 +8,10 @@ use axum::{
     response::IntoResponse,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
-use kafka::consumer::{Consumer, FetchOffset, GroupOffsetStorage};
 use serde::Deserialize;
 use serde_json::json;
 use std::collections::HashSet;
-use std::sync::{Arc, Mutex};
-use tokio::sync::broadcast;
+use std::sync::Arc;
 
 #[derive(Deserialize)]
 pub struct WsParams {
@@ -31,7 +27,7 @@ enum WsMessage {
 
 // Global state for active subscriptions (Simplified for this scope)
 // In a real system, you'd have a dedicated actor/manager
-type SubscriptionManager = Arc<Mutex<HashSet<String>>>;
+// type SubscriptionManager = Arc<Mutex<HashSet<String>>>;
 
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
@@ -57,7 +53,7 @@ pub async fn ws_handler(
     Ok(ws.on_upgrade(move |socket| handle_socket(socket, state, params.api_key)))
 }
 
-async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>, _api_key: String) {
+async fn handle_socket(socket: WebSocket, _state: Arc<AppState>, _api_key: String) {
     let (mut sender, mut receiver) = socket.split();
     let mut subscribed_symbols = HashSet::new();
 

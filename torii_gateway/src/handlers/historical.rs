@@ -2,28 +2,23 @@ use crate::billing::Billing;
 use crate::error::AppError;
 use crate::model::AuthContext;
 use crate::AppState;
-use aws_sdk_s3::presigning::PresigningConfig;
 use axum::{
     extract::{Query, State},
-    http::StatusCode,
     response::{IntoResponse, Redirect, Response},
     Json,
 };
-use parquet::{file::properties::WriterProperties, schema::parser::parse_message_type};
 use serde::Deserialize;
 use serde_json::json;
 use std::fs::File;
-use std::path::Path;
 use std::sync::Arc;
-use std::time::Duration;
 use uuid::Uuid;
 
 #[derive(Deserialize)]
 pub struct HistoricalParams {
     pub symbol: String,
-    pub start: Option<String>,
-    pub end: Option<String>,
-    pub limit: Option<i64>,
+    pub _start: Option<String>,
+    pub _end: Option<String>,
+    pub _limit: Option<i64>,
 }
 
 pub async fn historical_handler(

@@ -12,6 +12,7 @@ pub struct AuthContext {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct User {
     pub id: Uuid,
     pub email: String,
