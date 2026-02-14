@@ -117,11 +117,13 @@ services:
       timeout: 5s
       retries: 5
   # --------------------------------------------------------------------------
-  # INGESTION ENGINE (Built from source)
+  # TORII INGESTION ENGINE
   # --------------------------------------------------------------------------
-  ingestion-engine:
-    build: .
-    container_name: ingestion-engine
+  torii-ingestion:
+    build:
+      context: ./torii_ingestion
+      dockerfile: Dockerfile
+    container_name: torii-ingestion
     environment:
       RUST_LOG: info
       # Config crate with prefix "APP" and separator "__"
@@ -137,7 +139,7 @@ services:
     networks:
       - crypto_net
     healthcheck:
-      test: [ "CMD-SHELL", "pidof hft-ingestion-engine || exit 1" ]
+      test: [ "CMD-SHELL", "pidof torii-ingestion-engine || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 3

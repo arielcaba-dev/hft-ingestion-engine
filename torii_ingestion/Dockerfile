@@ -11,7 +11,7 @@ COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 # Build application
 COPY . .
-RUN cargo build --release --bin hft-ingestion-engine
+RUN cargo build --release --bin torii-ingestion-engine
 
 # Minimal runtime image
 FROM debian:bookworm-slim AS runtime
@@ -21,5 +21,5 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/target/release/hft-ingestion-engine /usr/local/bin
-ENTRYPOINT ["/usr/local/bin/hft-ingestion-engine"]
+COPY --from=builder /app/target/release/torii-ingestion-engine /usr/local/bin
+ENTRYPOINT ["/usr/local/bin/torii-ingestion-engine"]

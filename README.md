@@ -1,4 +1,6 @@
-# HFT Ingestion Engine
+# Torii Ingestion Engine
+
+![Torii Logo](assets/logo.png)
 
 A high-performance implementation of an Ingestion Layer for a Crypto Backend-as-a-Service (BaaS) platform, written in Rust. This engine is designed to ingest market data from multiple exchanges via WebSocket/FIX, normalize it, and publish it to Redpanda with deterministic sub-millisecond latency.
 
@@ -14,8 +16,8 @@ A high-performance implementation of an Ingestion Layer for a Crypto Backend-as-
 The system is designed as a lock-free pipeline to minimize latency and jitter:
 
 ```
-Binance WebSocket → Rust Ingestion Engine → Redpanda → QuestDB
-                    (Normalize & Buffer)    (Stream)   (Time-Series DB)
+Binance WebSocket → Torii Ingestion Engine → Redpanda → QuestDB
+                    (Normalize & Buffer)     (Stream)   (Time-Series DB)
 ```
 
 ### Pipeline Stages
@@ -36,19 +38,19 @@ Binance WebSocket → Rust Ingestion Engine → Redpanda → QuestDB
 ## Key Components
 
 ### 1. Lock-Free Ring Buffer
-Located in `src/core/ring_buffer.rs`.
+Located in `torii_ingestion/src/core/ring_buffer.rs`.
 - Implements a `RingBuffer<T>` using `AtomicUsize` and `UnsafeCell`.
 - Uses strict **cache line padding** (64 bytes) to prevent false sharing.
 - **SPSC** (Single-Producer, Single-Consumer) design optimized for the critical path.
 
 ### 2. Configuration
-Located in `src/config.rs`.
+Located in `torii_ingestion/src/config.rs`.
 - Robust configuration schema for managing Exchanges, Symbols, and Redpanda settings.
 - Supports loading connections via environment variables or config files.
 - **Dynamic Symbol Mapping**: Maps exchange-specific tickers (e.g., `BTCUSDT`) to internal normalized IDs (e.g., `BTC-USD`) at runtime.
 
 ### 3. Normalization & Data Model
-Located in `src/model.rs`.
+Located in `torii_ingestion/src/model.rs`.
 - **Dual Timestamping**: Every event captures `time_exchange` (matching engine time) and `time_ingest` (arrival time) to track network jitter.
 - **Unified ID**: Maps exchange-specific tickers to internal normalized IDs.
 
@@ -75,7 +77,7 @@ This starts:
 - **Redpanda** (Kafka-compatible broker)
 - **QuestDB** (Time-series database)
 - **Postgres** (Metadata storage)
-- **Ingestion Engine** (Rust application)
+- **Torii Ingestion** (Rust application)
 - **QuestDB Bridge** (Python Kafka → QuestDB writer)
 
 ### Service Ports
@@ -104,7 +106,7 @@ curl 'http://localhost:9000/exec?query=SELECT%20count()%20FROM%20trades'
 
 View ingestion logs:
 ```bash
-docker logs ingestion-engine --tail 50
+docker logs torii-ingestion --tail 50
 ```
 
 ### Manual Build (Development)
@@ -113,6 +115,7 @@ If you want to run the Rust engine standalone:
 
 ```bash
 # Build
+cd torii_ingestion
 cargo build --release
 
 # Run (requires Redpanda at localhost:9092)
@@ -132,12 +135,14 @@ The application will:
 To run the unit tests:
 
 ```bash
+cd torii_ingestion
 cargo test
 ```
 
 To run the performance benchmarks (Ring Buffer & Serialization):
 
 ```bash
+cd torii_ingestion
 cargo bench
 ```
 
@@ -207,35 +212,29 @@ GROUP BY symbol;
 
 ```
 .
-├── Cargo.toml
-├── Dockerfile                  # Rust ingestion engine container
-├── Dockerfile.bridge           # Python bridge container
-├── Dockerfile.worker           # Custom Arroyo worker (WIP)
-├── docker-compose.yaml         # Complete stack orchestration
-├── bridge.py                   # Python Kafka → QuestDB bridge
+├── torii_ingestion/            # Torii Ingestion Engine (Rust)
+│   ├── Cargo.toml
+│   ├── Dockerfile
+│   ├── benches/
+│   │   ├── ring_buffer_bench.rs
+│   │   └── serialization_bench.rs
+│   └── src/
+│       ├── lib.rs
+│       ├── config.rs
+│       ├── connectors/
+│       ├── core/
+│       ├── main.rs
+│       ├── model.rs
+│       ├── normalizers/
+│       └── producers/
 ├── torii_gateway/              # Torii API Gateway (Rust)
+├── bridge.py                   # Python Kafka → QuestDB bridge
 ├── arroyo/                     # Arroyo SQL pipelines
 │   ├── pipeline.sql
 │   ├── pipeline_simple.sql
 │   ├── pipeline_stable.sql
 │   └── pipeline_questdb.sql
-├── benches/                    # Performance benchmarks
-│   ├── ring_buffer_bench.rs
-│   └── serialization_bench.rs
-├── src/
-│   ├── lib.rs                  # Library export
-│   ├── config.rs               # Configuration definitions
-│   ├── connectors/             # Exchange connectivity logic
-│   │   └── mod.rs
-│   ├── core/                   # Core low-latency primitives
-│   │   ├── mod.rs
-│   │   └── ring_buffer.rs      # Lock-free RingBuffer implementation
-│   ├── main.rs                 # Application entry & pipeline wiring
-│   ├── model.rs                # Data models & serialization
-│   ├── normalizers/            # Data normalization logic
-│   │   └── mod.rs
-│   └── producers/              # Output publication logic
-│       └── mod.rs
+├── Dockerfile.bridge
 └── README.md
 ```
 

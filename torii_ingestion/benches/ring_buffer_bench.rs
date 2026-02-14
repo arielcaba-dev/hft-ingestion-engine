@@ -1,7 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use hft_ingestion_engine::core::ring_buffer::RingBuffer;
 use std::sync::Arc;
 use std::thread;
+use torii_ingestion_engine::core::ring_buffer::RingBuffer;
 
 fn ring_buffer_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("ring_buffer");

@@ -1,6 +1,6 @@
 use chrono::Utc;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use hft_ingestion_engine::model::{MarketEventType, NormalizedMarketData};
+use torii_ingestion_engine::model::{MarketEventType, NormalizedMarketData};
 
 fn serialization_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("serialization");
