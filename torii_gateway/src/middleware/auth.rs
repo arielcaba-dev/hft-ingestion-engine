@@ -7,10 +7,7 @@ use axum::{
     http::{request::Parts, StatusCode},
     RequestPartsExt,
 };
-use axum_extra::{
-    headers::{authorization::Bearer, Authorization},
-    TypedHeader,
-};
+
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

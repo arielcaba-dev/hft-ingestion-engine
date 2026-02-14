@@ -112,10 +112,10 @@ services:
     networks:
       - crypto_net
     healthcheck:
-      test: [ "CMD-SHELL", "wget --spider http://localhost:9003/ping || exit 1" ]
+      test: [ "CMD-SHELL", "wget --spider http://localhost:9000 || exit 1" ]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
   # --------------------------------------------------------------------------
   # TORII INGESTION ENGINE
   # --------------------------------------------------------------------------

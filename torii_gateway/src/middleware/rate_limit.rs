@@ -16,7 +16,7 @@ pub async fn rate_limit_middleware(
     auth: AuthContext,
     request: Request<Body>,
     next: Next,
-) -> Result<Response, AppError> {
+) -> Result<Response<Body>, AppError> {
     let mut redis_conn = state.redis.get_multiplexed_async_connection().await?;
     let key = format!("ratelimit:{}:{}", auth.user_id, "global"); // Simple global limit for now
     let limit = auth.rate_limit as isize;

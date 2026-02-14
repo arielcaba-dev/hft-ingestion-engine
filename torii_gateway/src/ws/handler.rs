@@ -1,6 +1,6 @@
 use crate::billing::Billing;
 use crate::error::AppError;
-use crate::middleware::auth::AuthContext;
+use crate::model::AuthContext;
 use crate::AppState;
 use axum::{
     extract::{

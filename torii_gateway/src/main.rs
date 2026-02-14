@@ -12,10 +12,10 @@ use axum::{
     Router,
 };
 use config::GatewayConfig;
-use log::info;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tracing::info;
 
 pub struct AppState {
     pub config: GatewayConfig,

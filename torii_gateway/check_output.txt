@@ -1,0 +1,197 @@
+   Compiling torii_gateway v0.1.0 (/home/ariel/.gemini/antigravity/scratch/hft-ingestion-engine/torii_gateway)
+error[E0433]: failed to resolve: use of unresolved module or unlinked crate `axum_extra`
+  --> src/middleware/auth.rs:10:5
+   |
+10 | use axum_extra::{
+   |     ^^^^^^^^^^ use of unresolved module or unlinked crate `axum_extra`
+   |
+   = help: if you wanted to use a crate named `axum_extra`, use `cargo add axum_extra` to add it to your `Cargo.toml`
+
+error[E0432]: unresolved import `axum_extra`
+  --> src/middleware/auth.rs:10:5
+   |
+10 | use axum_extra::{
+   |     ^^^^^^^^^^ use of unresolved module or unlinked crate `axum_extra`
+   |
+   = help: if you wanted to use a crate named `axum_extra`, use `cargo add axum_extra` to add it to your `Cargo.toml`
+
+error[E0432]: unresolved import `log`
+  --> src/main.rs:15:5
+   |
+15 | use log::info;
+   |     ^^^ help: a similar path exists: `tracing::log`
+
+error[E0603]: struct import `AuthContext` is private
+ --> src/ws/handler.rs:3:30
+  |
+3 | use crate::middleware::auth::AuthContext;
+  |                              ^^^^^^^^^^^ private struct import
+  |
+note: the struct import `AuthContext` is defined here...
+ --> src/middleware/auth.rs:2:5
+  |
+2 | use crate::model::AuthContext;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+note: ...and refers to the struct `AuthContext` which is defined here
+ --> src/model.rs:5:1
+  |
+5 | pub struct AuthContext {
+  | ^^^^^^^^^^^^^^^^^^^^^^ you could import this directly
+help: import `AuthContext` through the re-export
+  |
+3 - use crate::middleware::auth::AuthContext;
+3 + use model::AuthContext;
+  |
+
+warning: unused import: `File`
+ --> src/config.rs:1:48
+  |
+1 | use config::{Config, ConfigError, Environment, File};
+  |                                                ^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `aws_sdk_s3::presigning::PresigningConfig`
+ --> src/handlers/historical.rs:5:5
+  |
+5 | use aws_sdk_s3::presigning::PresigningConfig;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `http::StatusCode`
+ --> src/handlers/historical.rs:8:5
+  |
+8 |     http::StatusCode,
+  |     ^^^^^^^^^^^^^^^^
+
+warning: unused imports: `file::properties::WriterProperties` and `schema::parser::parse_message_type`
+  --> src/handlers/historical.rs:12:15
+   |
+12 | use parquet::{file::properties::WriterProperties, schema::parser::parse_message_type};
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::path::Path`
+  --> src/handlers/historical.rs:16:5
+   |
+16 | use std::path::Path;
+   |     ^^^^^^^^^^^^^^^
+
+warning: unused import: `std::time::Duration`
+  --> src/handlers/historical.rs:18:5
+   |
+18 | use std::time::Duration;
+   |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Serialize`
+ --> src/handlers/mcp.rs:6:26
+  |
+6 | use serde::{Deserialize, Serialize};
+  |                          ^^^^^^^^^
+
+warning: unused imports: `RequestPartsExt` and `StatusCode`
+ --> src/middleware/auth.rs:7:28
+  |
+7 |     http::{request::Parts, StatusCode},
+  |                            ^^^^^^^^^^
+8 |     RequestPartsExt,
+  |     ^^^^^^^^^^^^^^^
+
+warning: unused imports: `Deserialize` and `Serialize`
+  --> src/middleware/auth.rs:15:13
+   |
+15 | use serde::{Deserialize, Serialize};
+   |             ^^^^^^^^^^^  ^^^^^^^^^
+
+warning: unused import: `response::IntoResponse`
+ --> src/middleware/rate_limit.rs:8:5
+  |
+8 |     response::IntoResponse,
+  |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::model::AuthContext`
+ --> src/ws/ds_mode.rs:1:5
+  |
+1 | use crate::model::AuthContext;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `GroupOffsetStorage`
+  --> src/ws/ds_mode.rs:11:46
+   |
+11 | use kafka::consumer::{Consumer, FetchOffset, GroupOffsetStorage};
+   |                                              ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::billing::Billing`
+ --> src/ws/handler.rs:1:5
+  |
+1 | use crate::billing::Billing;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `Consumer`, `FetchOffset`, and `GroupOffsetStorage`
+  --> src/ws/handler.rs:13:23
+   |
+13 | use kafka::consumer::{Consumer, FetchOffset, GroupOffsetStorage};
+   |                       ^^^^^^^^  ^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `tokio::sync::broadcast`
+  --> src/ws/handler.rs:18:5
+   |
+18 | use tokio::sync::broadcast;
+   |     ^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0107]: missing generics for struct `axum::http::Response`
+   --> src/middleware/rate_limit.rs:19:13
+    |
+ 19 | ) -> Result<Response, AppError> {
+    |             ^^^^^^^^ expected 1 generic argument
+    |
+note: struct defined here, with 1 generic parameter: `T`
+   --> /home/ariel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/http-1.4.0/src/response.rs:174:12
+    |
+174 | pub struct Response<T> {
+    |            ^^^^^^^^ -
+help: add missing generic argument
+    |
+ 19 | ) -> Result<Response<T>, AppError> {
+    |                     +++
+
+warning: variable does not need to be mutable
+  --> src/ws/ds_mode.rs:27:27
+   |
+27 | async fn handle_ds_socket(mut socket: WebSocket, state: Arc<AppState>) {
+   |                           ----^^^^^^
+   |                           |
+   |                           help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+  --> src/ws/handler.rs:60:24
+   |
+60 | async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>, _api_key: String) {
+   |                        ----^^^^^^
+   |                        |
+   |                        help: remove this `mut`
+
+warning: unused variable: `run_mode`
+  --> src/config.rs:22:13
+   |
+22 |         let run_mode = env::var("RUN_MODE").unwrap_or_else(|_| "development".into());
+   |             ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_run_mode`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `m`
+  --> src/ws/ds_mode.rs:55:21
+   |
+55 |                 for m in ms.messages() {
+   |                     ^ help: if this is intentional, prefix it with an underscore: `_m`
+
+warning: unused variable: `state`
+  --> src/ws/handler.rs:60:47
+   |
+60 | async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>, _api_key: String) {
+   |                                               ^^^^^ help: if this is intentional, prefix it with an underscore: `_state`
+
+Some errors have detailed explanations: E0107, E0432, E0433, E0603.
+For more information about an error, try `rustc --explain E0107`.
+warning: `torii_gateway` (bin "torii_gateway") generated 20 warnings
+error: could not compile `torii_gateway` (bin "torii_gateway") due to 5 previous errors; 20 warnings emitted
