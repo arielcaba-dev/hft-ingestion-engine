@@ -213,6 +213,7 @@ GROUP BY symbol;
 ├── Dockerfile.worker           # Custom Arroyo worker (WIP)
 ├── docker-compose.yaml         # Complete stack orchestration
 ├── bridge.py                   # Python Kafka → QuestDB bridge
+├── torii_gateway/              # Torii API Gateway (Rust)
 ├── arroyo/                     # Arroyo SQL pipelines
 │   ├── pipeline.sql
 │   ├── pipeline_simple.sql
