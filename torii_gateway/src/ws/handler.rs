@@ -53,51 +53,117 @@ pub async fn ws_handler(
     Ok(ws.on_upgrade(move |socket| handle_socket(socket, state, params.api_key)))
 }
 
-async fn handle_socket(socket: WebSocket, _state: Arc<AppState>, _api_key: String) {
+async fn handle_socket(socket: WebSocket, state: Arc<AppState>, _api_key: String) {
     let (mut sender, mut receiver) = socket.split();
-    let mut subscribed_symbols = HashSet::new();
 
-    // Create a broadcast channel for this connection or reuse global?
-    // Architecture:
-    // We need a global broadcaster per symbol.
-    // Since we don't have that set up in AppState yet, let's simulate it or create a simple loop.
+    // Use an unbounded channel to bridge the blocking consumer thread and the async websocket sender
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
 
-    // For a real HFT gateway, you'd have:
-    // 1. Global Map<Symbol, BroadcastSender>
-    // 2. Background tasks consuming Kafka and sending to BroadcastSender
-    // 3. WsHandler subscribing to BroadcastReceiver
+    // Shared state for subscribed symbols (protected by RwLock/Mutex for thread safety if shared,
+    // but here we just need to read it in the consumer thread.
+    // To allow dynamic updates, we need a shared structure.)
+    let subscribed_symbols = Arc::new(std::sync::RwLock::new(HashSet::<String>::new()));
+    let sub_clone = subscribed_symbols.clone();
 
-    // Due to complexity, let's implement a simple Echo + Mock Stream for now,
-    // and note the full implementation requires the Global Broadcaster.
+    let config = state.config.clone();
 
-    // Or better: Implement the consumer loop directly for the requested symbols (inefficient but works for 1 client).
-    // The efficient way is "Lane 1" logic from the prompt: "Multiplexed... broadcast to fan out".
+    // Spawn a dedicated thread for Kafka consumption
+    std::thread::spawn(move || {
+        use rdkafka::config::ClientConfig;
+        use rdkafka::consumer::{BaseConsumer, Consumer};
+        use rdkafka::message::Message;
+        use std::time::Duration;
 
-    // Let's stub the subscription logic.
+        let consumer: BaseConsumer = ClientConfig::new()
+            .set("bootstrap.servers", &config.redpanda_brokers)
+            .set("group.id", format!("gateway-ws-{}", uuid::Uuid::new_v4()))
+            .set("auto.offset.reset", "latest")
+            .create()
+            .expect("Consumer creation failed");
 
-    while let Some(Ok(msg)) = receiver.next().await {
-        if let Message::Text(text) = msg {
-            if let Ok(action) = serde_json::from_str::<WsMessage>(&text) {
-                match action {
-                    WsMessage::Subscribe(symbols) => {
-                        for symbol in symbols {
-                            subscribed_symbols.insert(symbol);
+        consumer
+            .subscribe(&["market_data_raw"])
+            .expect("Subscribe failed");
+
+        loop {
+            match consumer.poll(Duration::from_millis(100)) {
+                Some(Ok(m)) => {
+                    if let Some(payload) = m.payload() {
+                        if let Ok(msg_str) = std::str::from_utf8(payload) {
+                            // println!("Debug: Received Kafka msg: {}", msg_str);
+
+                            // Basic filter: Check if symbol is in subscription list
+                            if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(msg_str)
+                            {
+                                // Redpanda messages are normalized: {"symbol_id":"BTC-USD", ...}
+                                if let Some(symbol) =
+                                    json_val.get("symbol_id").and_then(|v| v.as_str())
+                                {
+                                    let subs = sub_clone.read().unwrap();
+                                    // Check exact match (e.g. "BTC-USD") OR normalized match (e.g. "BTCUSDT")
+                                    // symbol is "BTC-USD". subs might have "BTCUSDT".
+                                    let normalized = symbol.replace("-", "");
+                                    // println!(
+                                    //     "Debug: Checking symbol {} (normalized: {}) against subs {:?}",
+                                    //     symbol, normalized, *subs
+                                    // );
+                                    if subs.contains(symbol) || subs.contains(&normalized) {
+                                        // println!("Debug: Match found for {}", symbol);
+                                        if tx.send(msg_str.to_string()).is_err() {
+                                            return;
+                                        }
+                                    }
+                                }
+                            }
                         }
-                        let _ = sender
-                            .send(Message::Text(
-                                json!({"status": "subscribed", "count": subscribed_symbols.len()})
-                                    .to_string(),
-                            ))
-                            .await;
                     }
-                    WsMessage::Unsubscribe(symbols) => {
-                        for symbol in symbols {
-                            subscribed_symbols.remove(&symbol);
+                }
+                Some(Err(e)) => eprintln!("Kafka error: {}", e),
+                None => {}
+            }
+        }
+    });
+
+    // Handle incoming messages (Subscriptions) and outgoing messages (Data)
+    // We need to select! between rx (data) and receiver (commands)
+
+    loop {
+        tokio::select! {
+            Some(msg) = rx.recv() => {
+                if sender.send(Message::Text(msg)).await.is_err() {
+                    break;
+                }
+            }
+            Some(Ok(msg)) = receiver.next() => {
+                 if let Message::Text(text) = msg {
+                    if let Ok(action) = serde_json::from_str::<WsMessage>(&text) {
+
+                        match action {
+                            WsMessage::Subscribe(symbols) => {
+                                let count = {
+                                    let mut subs = subscribed_symbols.write().unwrap();
+                                    for symbol in symbols {
+                                        subs.insert(symbol);
+                                    }
+                                    subs.len()
+                                };
+                                let _ = sender.send(Message::Text(json!({"status": "subscribed", "count": count}).to_string())).await;
+                            }
+                            WsMessage::Unsubscribe(symbols) => {
+                                let count = {
+                                    let mut subs = subscribed_symbols.write().unwrap();
+                                    for symbol in symbols {
+                                        subs.remove(&symbol);
+                                    }
+                                    subs.len()
+                                };
+                                let _ = sender.send(Message::Text(json!({"status": "unsubscribed", "count": count}).to_string())).await;
+                            }
                         }
-                        let _ = sender.send(Message::Text(json!({"status": "unsubscribed", "count": subscribed_symbols.len()}).to_string())).await;
                     }
                 }
             }
+            else => break, // Channel closed
         }
     }
 }

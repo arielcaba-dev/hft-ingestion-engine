@@ -16,8 +16,11 @@ A high-performance implementation of an Ingestion Layer for a Crypto Backend-as-
 The system is designed as a lock-free pipeline to minimize latency and jitter:
 
 ```
-Binance WebSocket → Torii Ingestion Engine → Redpanda → QuestDB
-                    (Normalize & Buffer)     (Stream)   (Time-Series DB)
+Binance WebSocket → Torii Ingestion → Redpanda → Torii Gateway → WebSocket Clients
+                    (Normalize)       (Stream)      (API/WS)        (JSON/Protobuf)
+                                          ↓
+                                      QuestDB
+                                   (Time-Series DB)
 ```
 
 ### Pipeline Stages
@@ -207,6 +210,91 @@ FROM trades
 GROUP BY symbol;
 ```
 
+## WebSocket Gateway (Torii Gateway)
+
+The `torii-gateway` service provides real-time WebSocket endpoints for streaming market data to clients.
+
+### Endpoints
+
+**DS Mode (Protobuf)**: `/v1/ws/ds?api_key=<key>`
+- High-performance binary Protobuf stream
+- Consumes directly from Redpanda
+- Designed for HFT clients
+
+**Standard Mode (JSON)**: `/v1/ws?api_key=<key>`
+- JSON-based WebSocket stream
+- Dynamic symbol subscriptions
+- Retail-friendly format
+
+### rdkafka Migration
+
+Both endpoints migrated from deprecated `kafka` crate to `rdkafka` for Redpanda compatibility:
+
+**Changes**:
+- Dependency: `rdkafka = { version = "0.36", features = ["cmake-build"] }`
+- Dedicated consumer threads per connection
+- Symbol normalization: `BTC-USD` ↔ `BTCUSDT`
+- Thread-safe subscription management with `Arc<RwLock<HashSet<String>>>`
+
+**Latency Benchmarks** (Standard Mode, 100 messages):
+- **Mean**: 202.01 ms
+- **Median**: 200.84 ms
+- **P95**: 350.68 ms
+- **P99**: 362.27 ms
+
+### Testing WebSocket Endpoints
+
+**DS Mode**:
+```bash
+python3 test_ws.py
+# Expected: 5 binary Protobuf messages
+```
+
+**Standard Mode**:
+```bash
+python3 test_ws_json.py
+# Expected: Real-time JSON trade data
+```
+
+**Latency Benchmark**:
+```bash
+python3 benchmark_latency.py
+# Expected: Statistical latency report
+```
+
+### WebSocket Message Format
+
+**Subscribe** (Standard Mode):
+```json
+{
+  "action": "Subscribe",
+  "symbols": ["BTC-USD", "ETH-USD"]
+}
+```
+
+**Unsubscribe** (Standard Mode):
+```json
+{
+  "action": "Unsubscribe",
+  "symbols": ["BTC-USD"]
+}
+```
+
+**Data Message** (Standard Mode):
+```json
+{
+  "symbol_id": "BTC-USD",
+  "exchange": "binance",
+  "event_type": "trade",
+  "price": 68924.24,
+  "quantity": 0.00009,
+  "time_exchange": "2026-02-15T13:52:21.622Z",
+  "time_ingest": "2026-02-15T13:52:21.934645250Z",
+  "is_snapshot": false,
+  "sequence": 5964820671
+}
+```
+
 
 ## Project Structure
 
@@ -236,19 +324,31 @@ GROUP BY symbol;
 │   └── pipeline_questdb.sql
 ├── Dockerfile.bridge
 └── README.md
-```
 
 ## Production Metrics
 
-**Current Deployment** (as of 2026-02-12):
-- **Total Trades Ingested**: 168,637
-- **BTC-USD**: 100,139 trades ($66,921 - $67,292)
-- **ETH-USD**: 68,498 trades ($1,962 - $1,973)
+**Current Deployment** (as of 2026-02-15):
+- **Total Trades Ingested**: 168,637+
+- **BTC-USD**: 100,139+ trades
+- **ETH-USD**: 68,498+ trades
 - **Uptime**: 100%
 - **Data Loss**: 0%
-- **End-to-End Latency**: < 1 second
+- **End-to-End Latency (Ingestion)**: < 1 second
+- **WebSocket Latency (Gateway)**: ~200ms mean, ~350ms P95
+
+**WebSocket Endpoints**:
+- ✅ DS Mode (Protobuf) - Operational
+- ✅ Standard Mode (JSON) - Operational
+- ✅ rdkafka migration complete
+
+**Services**:
+- `torii-ingestion` - Binance → Redpanda ingestion
+- `torii-gateway` - WebSocket API gateway
+- `bridge.py` - QuestDB writer
+- `redpanda` - Message broker
+- `questdb` - Time-series database
 
 ## License
 
 MIT
-
+```

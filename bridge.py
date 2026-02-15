@@ -31,17 +31,19 @@ def run():
 
     with Sender.from_conf(conf) as sender:
         try:
+            msg_count = 0
             while True:
                 msg = c.poll(1.0)  # Poll with 1s timeout
-
+                
                 if msg is None:
+                    # Flush any remaining messages in buffer if idle
+                    sender.flush()
                     continue
+                
                 if msg.error():
                     print(f"Consumer error: {msg.error()}")
                     continue
 
-                # 3. Parse & Transform
-                # Assuming JSON: {"symbol_id": "BTC-USD", "price": 50000.0, "quantity": 1.5, "time_exchange": 1678900000}
                 try:
                     data = json.loads(msg.value().decode('utf-8'))
                     
@@ -49,9 +51,9 @@ def run():
                     # Assuming time_exchange is in seconds (Unix epoch)
                     ts_nanos = int(data.get('time_exchange', 0) * 1_000_000_000)
 
-                    # 4. Buffer Row (ILP)
+                    # Buffer Row (ILP)
                     sender.row(
-                        'trades',  # Table Name
+                        'trades',
                         symbols={
                             'symbol': data.get('symbol_id', 'UNKNOWN')
                         },
@@ -59,17 +61,17 @@ def run():
                             'price': float(data.get('price', 0.0)),
                             'quantity': float(data.get('quantity', 0.0))
                         },
-                        at=ts_nanos
+                        at=TimestampNanos.now() # Use current time if source time is missing or for easier debugging
                     )
-
-                    # Flush regularly (QuestDB client auto-flushes based on buffer size, 
-                    # but explicit flush ensures low latency for low-volume streams)
-                    sender.flush()
                     
-                    print(f"✅ Wrote: {data.get('symbol_id')} @ {data.get('price')}")
+                    # Explicit batch flush to control memory
+                    msg_count += 1
+                    if msg_count % 1000 == 0:
+                       # print(f"✅ Processed {msg_count} messages")
+                       sender.flush()
 
                 except Exception as e:
-                    print(f"⚠️ Serialization Error: {e}, Payload: {msg.value()}")
+                    print(f"⚠️ Serialization Error: {e}")
 
         except KeyboardInterrupt:
             print("\n🛑 Bridge stopped")

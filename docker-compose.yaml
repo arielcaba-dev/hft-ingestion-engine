@@ -31,6 +31,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1G
 
   # --------------------------------------------------------------------------
   # REDPANDA INIT (Topic Creation)
@@ -116,6 +120,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 20
+    deploy:
+      resources:
+        limits:
+          memory: 1G
   # --------------------------------------------------------------------------
   # TORII INGESTION ENGINE
   # --------------------------------------------------------------------------
@@ -129,20 +137,25 @@ services:
       # Config crate with prefix "APP" and separator "__"
       # APP_REDPANDA__BROKERS -> redpanda.brokers
       # APP_REDPANDA__TOPIC_PREFIX -> redpanda.topic_prefix
-      APP_REDPANDA__BROKERS: "redpanda:9092"
+      APP_REDPANDA__BROKERS: "localhost:19092"
       APP_REDPANDA__TOPIC_PREFIX: "market_data_raw"
     depends_on:
       redpanda:
         condition: service_healthy
       init-redpanda:
         condition: service_started
-    networks:
-      - crypto_net
+    # networks:
+    #   - crypto_net
+    network_mode: "host"
     healthcheck:
       test: [ "CMD-SHELL", "pidof torii-ingestion-engine || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   # --------------------------------------------------------------------------
   # QUESTDB BRIDGE (Python Kafka -> QuestDB ILP)
@@ -165,6 +178,10 @@ services:
         condition: service_healthy
     networks:
       - crypto_net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   # --------------------------------------------------------------------------
   # REDIS (Rate Limiting & Caching)
@@ -241,6 +258,10 @@ services:
         condition: service_healthy
     networks:
       - crypto_net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
 volumes:
   redpanda_data:

@@ -27,8 +27,8 @@ hex = "0.4"
 reqwest = { version = "0.11", features = ["json"] }
 prost = "0.12"
 prost-types = "0.12"
-# Kafka/Redpanda support (Pure Rust)
-kafka = "0.10"
+# Kafka/Redpanda support (via librdkafka for modern protocol support)
+rdkafka = { version = "0.36", features = ["cmake-build"] }
 futures = "0.3"
 aws-sdk-s3 = "1.0"
 aws-config = "1.0"

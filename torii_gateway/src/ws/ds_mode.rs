@@ -7,9 +7,14 @@ use axum::{
     response::IntoResponse,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
-use kafka::consumer::{Consumer, FetchOffset};
-use prost::Message as ProstMessage;
-use std::sync::Arc; // Rename to avoid conflict with axum Message
+use prost::Message as ProstMessage; // Rename to avoid conflict with axum Message
+use rdkafka::config::ClientConfig;
+use rdkafka::consumer::{BaseConsumer, Consumer};
+use rdkafka::message::Message as RdMessage;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::mpsc;
+use uuid;
 
 // Include generated protobuf
 pub mod market_data {
@@ -26,65 +31,81 @@ pub async fn ds_handler(
 async fn handle_ds_socket(socket: WebSocket, state: Arc<AppState>) {
     let (mut sender, _receiver) = socket.split();
 
-    // Create a channel to bridge blocking Kafka thread and Async WebSocket
-    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
+    // Create a channel to send protobuf bytes from the consumer thread to the websocket sender
+    let (tx, mut rx) = mpsc::unbounded_channel::<Vec<u8>>();
 
-    let brokers = vec![state.config.redpanda_brokers.clone()];
-    let topic = "market_data_raw".to_string();
+    let config = state.config.clone();
 
-    // Spawn dedicated blocking thread for high-performance consumption
+    // Spawn a dedicated thread for Kafka consumption (blocking IO in rdkafka BaseConsumer)
+    // Alternatively use StreamConsumer for async, but BaseConsumer is fine for a dedicated thread.
+    // For high performance, we should reuse a global consumer and broadcast,
+    // but for "DS Mode" (Direct Stream), a dedicated consumer per connection guarantees
+    // strictly ordered, partition-specific delivery if configured.
     std::thread::spawn(move || {
-        let mut consumer = match Consumer::from_hosts(brokers)
-            .with_topic(topic)
-            .with_fallback_offset(FetchOffset::Latest)
-            //.with_group("ds_consumer_group".to_string()) // DS mode might want unique group or no group?
-            // Usually DS mode is unique per connection, so we might need random group or assign partition manually
+        let consumer: BaseConsumer = ClientConfig::new()
+            .set("bootstrap.servers", &config.redpanda_brokers)
+            .set("group.id", format!("gateway-ds-{}", uuid::Uuid::new_v4())) // Unique group for DS mode (fan-out)
+            .set("auto.offset.reset", "latest")
             .create()
-        {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("Failed to create kafka consumer: {}", e);
-                return;
-            }
-        };
+            .expect("Consumer creation failed");
+
+        consumer
+            .subscribe(&["market_data_raw"])
+            .expect("Subscribe failed");
 
         loop {
             // Poll for messages
-            let poll_result = consumer.poll();
-            if let Err(e) = poll_result {
-                eprintln!("Kafka poll failed: {}", e);
-                std::thread::sleep(std::time::Duration::from_millis(100));
-                continue;
-            }
+            match consumer.poll(Duration::from_millis(100)) {
+                Some(Ok(m)) => {
+                    // Start Parsing
+                    // Ingestion format: {"e":"trade","E":1771...,"s":"BTCUSDT","p":"70313.77",...}
+                    if let Some(payload) = m.payload() {
+                        if let Ok(json_val) = serde_json::from_slice::<serde_json::Value>(payload) {
+                            // Extract fields safely
+                            let symbol_raw = json_val
+                                .get("s")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("UNKNOWN");
+                            let price_str =
+                                json_val.get("p").and_then(|v| v.as_str()).unwrap_or("0.0");
+                            let qty_str =
+                                json_val.get("q").and_then(|v| v.as_str()).unwrap_or("0.0");
+                            let ts = json_val.get("E").and_then(|v| v.as_i64()).unwrap_or(0);
 
-            for ms in poll_result.unwrap().iter() {
-                for _m in ms.messages() {
-                    // In a real scenario, 'm.value' is the source data.
-                    // We need to parse it (if it's JSON/Bincode) and re-serialize to Protobuf.
-                    // Or if source is already Protobuf, pass through.
+                            // Map Symbol
+                            let symbol = match symbol_raw {
+                                "BTCUSDT" => "BTC-USD",
+                                "ETHUSDT" => "ETH-USD",
+                                _ => symbol_raw,
+                            };
 
-                    // For demo, we construct a dummy packet
-                    let packet = market_data::MarketDataPacket {
-                        symbol: "BTC-USD".to_string(),
-                        price: 67000.0,
-                        quantity: 0.5,
-                        timestamp: chrono::Utc::now().timestamp_millis(),
-                        is_snapshot: false,
-                        sequence_id: 0,
-                    };
+                            let packet = market_data::MarketDataPacket {
+                                symbol: symbol.to_string(),
+                                price: price_str.parse().unwrap_or(0.0),
+                                quantity: qty_str.parse().unwrap_or(0.0),
+                                timestamp: ts,
+                                is_snapshot: false,
+                                sequence_id: 0,
+                            };
 
-                    let mut buf = Vec::new();
-                    if let Ok(_) = packet.encode(&mut buf) {
-                        if tx.send(buf).is_err() {
-                            return; // Channel closed, exit thread
+                            let mut buf = Vec::new();
+                            if let Ok(_) = packet.encode(&mut buf) {
+                                if tx.send(buf).is_err() {
+                                    return; // Channel closed, exit thread
+                                }
+                            }
                         }
                     }
                 }
+                Some(Err(e)) => {
+                    eprintln!("Kafka error: {}", e);
+                }
+                None => {} // Timeout
             }
         }
     });
 
-    // Async loop to pipe data to WebSocket
+    // Forward messages from channel to WebSocket
     while let Some(data) = rx.recv().await {
         if sender.send(Message::Binary(data)).await.is_err() {
             break;
