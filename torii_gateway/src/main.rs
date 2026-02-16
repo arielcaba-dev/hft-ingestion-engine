@@ -73,6 +73,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/v1/trades/historical",
             get(handlers::historical::historical_handler),
         )
+        .route(
+            "/v1/market/health",
+            get(handlers::market::get_market_health),
+        )
+        .route(
+            "/v1/market/recent-trades",
+            get(handlers::market::get_recent_trades),
+        )
         .layer(from_fn_with_state(
             state.clone(),
             middleware::rate_limit::rate_limit_middleware,

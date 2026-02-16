@@ -80,6 +80,12 @@ def check_questdb_metrics(symbol="BTC-USD"):
         data = resp.json()
         if data.get('count', 0) > 0:
             print("✅ Risk Metrics Found:")
+            columns = [c['name'] for c in data['columns']]
+            if 'cvar_95' in columns:
+                print("   Found 'cvar_95' column.")
+            else:
+                print("   ⚠️ 'cvar_95' column NOT found.")
+                
             for row in data['dataset']:
                 print(row)
         else:

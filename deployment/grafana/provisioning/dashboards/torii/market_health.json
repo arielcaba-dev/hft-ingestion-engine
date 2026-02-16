@@ -1,0 +1,140 @@
+{
+  "title": "Torii Market Health - Gold Layer",
+  "uid": "torii-market-health",
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "5s",
+  "panels": [
+    {
+      "id": 1,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "type": "timeseries",
+      "title": "Live Trade Volume (Last Hour)",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "questdb"
+          },
+          "rawSql": "SELECT timestamp as time, count() as trades FROM trades WHERE timestamp > dateadd('h', -1, now()) SAMPLE BY 1m",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "type": "stat",
+      "title": "Pipeline Latency",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "questdb"
+          },
+          "rawSql": "SELECT (now() - max(timestamp)) / 1000000 as lag_ms FROM trades",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": 0,
+                "color": "green"
+              },
+              {
+                "value": 1000,
+                "color": "yellow"
+              },
+              {
+                "value": 5000,
+                "color": "red"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "type": "table",
+      "title": "Recent Trades (Last 100)",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "questdb"
+          },
+          "rawSql": "SELECT timestamp, symbol, price, quantity FROM trades ORDER BY timestamp DESC LIMIT 100",
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "type": "stat",
+      "title": "Data Metrics",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "questdb"
+          },
+          "rawSql": "SELECT count() as \"Total Trades\" FROM trades",
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "questdb"
+          },
+          "rawSql": "SELECT count(distinct symbol) as \"Active Symbols\" FROM trades WHERE timestamp > dateadd('h', -1, now())",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "textMode": "value_and_name"
+      }
+    }
+  ]
+}

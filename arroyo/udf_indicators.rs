@@ -196,4 +196,89 @@ mod tests {
             calculate_liquidity_score(vec![10.0, 10.0, 10.0], vec![100.0, 110.0, 95.0]).unwrap();
         assert!(high_liq > low_liq);
     }
+
+    // ========== CVaR Tests ==========
+
+    #[test]
+    fn test_cvar_insufficient_data() {
+        assert_eq!(calculate_cvar(vec![], 0.95), None);
+        // Need at least 1 point but if logic handles it...
+        assert_eq!(calculate_cvar(vec![0.0], 1.1), None); // Invalid confidence
+    }
+
+    #[test]
+    fn test_cvar_simple() {
+        // 10 returns: -10%, -9%, ..., -1%.
+        // 90% confidence -> worst 10% -> worst 1 return -> -10%.
+        let returns = vec![
+            -0.10, -0.09, -0.08, -0.07, -0.06, -0.05, -0.04, -0.03, -0.02, -0.01,
+        ];
+        let cvar = calculate_cvar(returns, 0.90).unwrap();
+        assert!(approx_eq(cvar, -0.10, 0.001));
+    }
+
+    #[test]
+    fn test_cvar_tail_average() {
+        // 10 returns. 80% confidence -> worst 20% -> worst 2 returns.
+        // Returns: -0.10, -0.05, ...
+        let mut returns = vec![0.01; 8]; // 8 positive/small returns
+        returns.push(-0.05);
+        returns.push(-0.15);
+        // Sorted: -0.15, -0.05, 0.01 ...
+        // Worst 2 are -0.15 and -0.05. Average = -0.10.
+        let cvar = calculate_cvar(returns, 0.80).unwrap();
+        assert!(approx_eq(cvar, -0.10, 0.001));
+    }
+
+    #[test]
+    fn test_cvar_boundary_conditions() {
+        // Confidence 1.0 -> None (cannot define tail of 0 items mathematically effectively)
+        assert_eq!(calculate_cvar(vec![0.1, 0.2], 1.0), None);
+        // Confidence 0.0 -> None
+        assert_eq!(calculate_cvar(vec![0.1, 0.2], 0.0), None);
+        // Confidence just below 1.0 -> should yield worst item
+        let cvar = calculate_cvar(vec![0.1, 0.2, 0.3], 0.999).unwrap();
+        assert!(approx_eq(cvar, 0.1, 0.001));
+    }
+
+    #[test]
+    fn test_cvar_single_value() {
+        // With 1 value, any confidence < 1.0 implies that 1 value is in the tail
+        let cvar = calculate_cvar(vec![-0.05], 0.95).unwrap();
+        assert_eq!(cvar, -0.05);
+    }
+}
+
+/// Calculates Conditional Value at Risk (CVaR) / Expected Shortfall
+/// `returns`: A vector of historical returns (e.g., (price_t - price_t-1)/price_t-1)
+/// `confidence_level`: The confidence level (e.g., 0.95 or 0.99)
+/// Returns the expected return in the worst `(1 - confidence)` scenarios.
+/// Note: Represents the mean of the tail distribution. Negative value indicates loss.
+pub fn calculate_cvar(returns: Vec<f64>, confidence_level: f64) -> Option<f64> {
+    if returns.is_empty() || confidence_level <= 0.0 || confidence_level >= 1.0 {
+        return None;
+    }
+
+    let mut sorted_returns = returns.clone();
+    // Sort ascending (worst losses are smallest/negative numbers at the start)
+    sorted_returns.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    // Calculate index for the cutoff
+    // e.g., 100 items, 0.95 confidence -> 5% tail -> 5 items.
+    let tail_count = ((1.0 - confidence_level) * sorted_returns.len() as f64).ceil() as usize;
+
+    // Ensure at least one item if possible, but respect mathematical definition
+    if tail_count == 0 {
+        // Fallback to worst single case or None?
+        // If len=10, 0.99 conf -> 0.1 items -> ceil -> 1 item.
+        return sorted_returns.first().copied();
+    }
+
+    let tail = &sorted_returns[0..tail_count];
+    if tail.is_empty() {
+        return None;
+    }
+
+    let sum: f64 = tail.iter().sum();
+    Some(sum / tail.len() as f64)
 }

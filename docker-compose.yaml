@@ -225,6 +225,28 @@ services:
       retries: 3
 
   # --------------------------------------------------------------------------
+  # GRAFANA (Data Visualization)
+  # --------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: admin
+      GF_INSTALL_PLUGINS: ""
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deployment/grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - crypto_net
+    depends_on:
+      questdb:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
   # TORII GATEWAY SERVICE
   # --------------------------------------------------------------------------
   torii-gateway:
@@ -270,6 +292,7 @@ volumes:
   redis_data:
   minio_data:
   cargo_cache:
+  grafana_data:
 
 
 networks:

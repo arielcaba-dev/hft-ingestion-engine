@@ -117,6 +117,33 @@ CREATE FUNCTION calculate_liquidity(volumes: ARRAY<DOUBLE>, prices: ARRAY<DOUBLE
     1000.0 // Stub
 $$;
 
+CREATE FUNCTION calculate_cvar(prices: ARRAY<DOUBLE>, confidence: DOUBLE) RETURNS DOUBLE LANGUAGE RUST AS $$
+    if prices.len() < 2 || confidence <= 0.0 || confidence >= 1.0 {
+        return 0.0;
+    }
+    let mut returns = Vec::with_capacity(prices.len() - 1);
+    for i in 1..prices.len() {
+        if prices[i-1] != 0.0 {
+            returns.push((prices[i] - prices[i-1]) / prices[i-1]);
+        }
+    }
+    
+    if returns.is_empty() { return 0.0; }
+    
+    let mut sorted_returns = returns.clone();
+    sorted_returns.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    
+    let tail_count = ((1.0 - confidence) * sorted_returns.len() as f64).ceil() as usize;
+    if tail_count == 0 {
+        return sorted_returns.first().copied().unwrap_or(0.0);
+    }
+    
+    let tail = &sorted_returns[0..tail_count];
+    if tail.is_empty() { return 0.0; }
+    
+    tail.iter().sum::<f64>() / tail.len() as f64
+$$;
+
 
 -- =================================================================================
 -- PIPELINE LOGIC
@@ -147,10 +174,8 @@ SELECT
     window_end,
     calculate_volatility(price_history) as realized_volatility,
     calculate_liquidity(vol_history, price_history) as liquidity_score,
-    calculate_rsi(price_history) as rsi_14 -- Note: RSI usually needs previous Close. Windowed Agg is distinct.
-    -- Streaming RSI requires stateful processing across windows (Hop windows or custom state function).
-    -- Tumble window RSI is distinct per window (not standard).
-    -- For standard RSI, we need a sliding window or a stateful UDF that maintains history.
+    calculate_rsi(price_history) as rsi_14,
+    calculate_cvar(price_history, 0.95) as cvar_95
 FROM ohlcv_1m;
 
 -- 3. SINK TO QUESTDB (METRICS)
@@ -165,7 +190,8 @@ CREATE TABLE metrics_sink (
     window_end TIMESTAMP,
     volatility DOUBLE,
     liquidity DOUBLE,
-    rsi DOUBLE
+    rsi DOUBLE,
+    cvar_95 DOUBLE
 ) WITH (
     connector = 'kafka',
     topic = 'metrics_derived',
@@ -179,7 +205,8 @@ SELECT
     window_end,
     realized_volatility,
     liquidity_score,
-    rsi_14
+    rsi_14,
+    cvar_95
 FROM risk_metrics;
 
 -- 4. OHLCV SINK

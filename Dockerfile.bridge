@@ -6,7 +6,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-RUN pip install --no-cache-dir confluent-kafka questdb
+RUN pip install --no-cache-dir confluent-kafka questdb questdb
 
 WORKDIR /app
 COPY bridge.py .

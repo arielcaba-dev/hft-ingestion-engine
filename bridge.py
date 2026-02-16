@@ -1,9 +1,11 @@
 """
 QuestDB Bridge - Kafka to QuestDB ILP Writer
 Consumes market data from Redpanda and writes to QuestDB using InfluxDB Line Protocol.
+Supports multiple topics: market_data_raw (trades) and ohlcv_1m (candles)
 """
 import json
 import os
+import threading
 from datetime import datetime
 from confluent_kafka import Consumer, KafkaError
 from questdb.ingress import Sender, IngressError, TimestampNanos
@@ -12,31 +14,36 @@ from questdb.ingress import Sender, IngressError, TimestampNanos
 KAFKA_BROKER = os.getenv('KAFKA_BROKER', 'redpanda:9092')
 QUESTDB_HOST = os.getenv('QUESTDB_HOST', 'questdb')
 QUESTDB_PORT = int(os.getenv('QUESTDB_PORT', 9009))
-TOPIC = os.getenv('TOPIC', 'market_data_raw')
 
-def run():
-    # 1. Setup Kafka Consumer
+def parse_iso8601_to_nanos(timestamp_str):
+    """Convert ISO 8601 timestamp to TimestampNanos"""
+    try:
+        dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+        nanos = int(dt.timestamp() * 1_000_000_000)
+        return TimestampNanos(nanos)
+    except Exception as e:
+        print(f"⚠️ Timestamp parse error: {e}, using now()")
+        return TimestampNanos.now()
+
+def consume_trades():
+    """Consumer for raw trade data -> trades table"""
     c = Consumer({
         'bootstrap.servers': KAFKA_BROKER,
-        'group.id': 'questdb-bridge-group',
+        'group.id': 'questdb-trades-group',
         'auto.offset.reset': 'earliest'
     })
-    c.subscribe([TOPIC])
-
-    # 2. Setup QuestDB Sender
-    # Using specific configuration for high-throughput
-    conf = f'tcp::addr={QUESTDB_HOST}:{QUESTDB_PORT};'
+    c.subscribe(['market_data_raw', 'market_data_v2'])
     
-    print(f"🚀 Bridge started: {KAFKA_BROKER} -> {QUESTDB_HOST}:{QUESTDB_PORT} (Topic: {TOPIC})")
-
+    conf = f'tcp::addr={QUESTDB_HOST}:{QUESTDB_PORT};'
+    print(f"🚀 Trades consumer started: {KAFKA_BROKER} -> {QUESTDB_HOST}:{QUESTDB_PORT}")
+    
     with Sender.from_conf(conf) as sender:
         try:
             msg_count = 0
             while True:
-                msg = c.poll(1.0)  # Poll with 1s timeout
+                msg = c.poll(1.0)
                 
                 if msg is None:
-                    # Flush any remaining messages in buffer if idle
                     sender.flush()
                     continue
                 
@@ -47,11 +54,6 @@ def run():
                 try:
                     data = json.loads(msg.value().decode('utf-8'))
                     
-                    # Convert timestamp to nanoseconds for QuestDB
-                    # Assuming time_exchange is in seconds (Unix epoch)
-                    ts_nanos = int(data.get('time_exchange', 0) * 1_000_000_000)
-
-                    # Buffer Row (ILP)
                     sender.row(
                         'trades',
                         symbols={
@@ -61,22 +63,154 @@ def run():
                             'price': float(data.get('price', 0.0)),
                             'quantity': float(data.get('quantity', 0.0))
                         },
-                        at=TimestampNanos.now() # Use current time if source time is missing or for easier debugging
+                        at=TimestampNanos.now()
                     )
                     
-                    # Explicit batch flush to control memory
                     msg_count += 1
                     if msg_count % 1000 == 0:
-                       # print(f"✅ Processed {msg_count} messages")
                        sender.flush()
 
                 except Exception as e:
-                    print(f"⚠️ Serialization Error: {e}")
+                    print(f"⚠️ Trades serialization error: {e}")
 
         except KeyboardInterrupt:
-            print("\n🛑 Bridge stopped")
+            print("\n🛑 Trades consumer stopped")
         finally:
             c.close()
+
+def consume_ohlcv():
+    """Consumer for OHLCV candles -> ohlcv_1m table"""
+    c = Consumer({
+        'bootstrap.servers': KAFKA_BROKER,
+        'group.id': 'questdb-ohlcv-group',
+        'auto.offset.reset': 'earliest'
+    })
+    c.subscribe(['ohlcv_1m'])
+    
+    conf = f'tcp::addr={QUESTDB_HOST}:{QUESTDB_PORT};'
+    print(f"📊 OHLCV consumer started: {KAFKA_BROKER} -> {QUESTDB_HOST}:{QUESTDB_PORT}")
+    
+    with Sender.from_conf(conf) as sender:
+        try:
+            msg_count = 0
+            while True:
+                msg = c.poll(1.0)
+                
+                if msg is None:
+                    sender.flush()
+                    continue
+                
+                if msg.error():
+                    print(f"OHLCV consumer error: {msg.error()}")
+                    continue
+
+                try:
+                    data = json.loads(msg.value().decode('utf-8'))
+                    
+                    # Parse window_end timestamp
+                    ts_nanos = parse_iso8601_to_nanos(data.get('window_end'))
+                    
+                    sender.row(
+                        'ohlcv_1m',
+                        symbols={
+                            'symbol': data.get('symbol_id', 'UNKNOWN')
+                        },
+                        columns={
+                            'open': float(data.get('open', 0.0)),
+                            'high': float(data.get('high', 0.0)),
+                            'low': float(data.get('low', 0.0)),
+                            'close': float(data.get('close', 0.0)),
+                            'volume': float(data.get('volume', 0.0))
+                        },
+                        at=ts_nanos
+                    )
+                    
+                    msg_count += 1
+                    if msg_count % 100 == 0:
+                        print(f"✅ OHLCV: Processed {msg_count} candles")
+                        sender.flush()
+
+                except Exception as e:
+                    print(f"⚠️ OHLCV serialization error: {e}, data: {msg.value()[:200]}")
+
+        except KeyboardInterrupt:
+            print("\n🛑 OHLCV consumer stopped")
+        finally:
+            c.close()
+
+def consume_metrics():
+    """Consumer for derived risk metrics -> market_risk table"""
+    c = Consumer({
+        'bootstrap.servers': KAFKA_BROKER,
+        'group.id': 'questdb-metrics-group',
+        'auto.offset.reset': 'earliest'
+    })
+    c.subscribe(['metrics_derived'])
+    
+    conf = f'tcp::addr={QUESTDB_HOST}:{QUESTDB_PORT};'
+    print(f"📈 Metrics consumer started: {KAFKA_BROKER} -> {QUESTDB_HOST}:{QUESTDB_PORT}")
+    
+    with Sender.from_conf(conf) as sender:
+        try:
+            msg_count = 0
+            while True:
+                msg = c.poll(1.0)
+                
+                if msg is None:
+                    sender.flush()
+                    continue
+                
+                if msg.error():
+                    print(f"Consumer error: {msg.error()}")
+                    continue
+
+                try:
+                    data = json.loads(msg.value().decode('utf-8'))
+                    ts_nanos = parse_iso8601_to_nanos(data.get('window_end', datetime.utcnow().isoformat()))
+                    
+                    sender.row(
+                        'market_risk',
+                        symbols={
+                            'symbol': data.get('symbol_id', 'UNKNOWN')
+                        },
+                        columns={
+                            'volatility': float(data.get('volatility', 0.0)),
+                            'liquidity': float(data.get('liquidity', 0.0)),
+                            'rsi': float(data.get('rsi', 0.0)),
+                            'cvar_95': float(data.get('cvar_95', 0.0))
+                        },
+                        at=ts_nanos
+                    )
+                    
+                    msg_count += 1
+                    if msg_count % 100 == 0:
+                        print(f"✅ Metrics: Processed {msg_count} records")
+                        sender.flush()
+
+                except Exception as e:
+                    print(f"⚠️ Metrics serialization error: {e}, data: {msg.value()[:200]}")
+
+        except KeyboardInterrupt:
+            print("\n🛑 Metrics consumer stopped")
+        finally:
+            c.close()
+
+def run():
+    """Start all consumer threads"""
+    print("=" * 60)
+    print("QuestDB Bridge - Multi-Topic Consumer")
+    print("=" * 60)
+    
+    # Start trades consumer in separate thread
+    trades_thread = threading.Thread(target=consume_trades, daemon=True)
+    trades_thread.start()
+    
+    # Start metrics consumer in separate thread
+    metrics_thread = threading.Thread(target=consume_metrics, daemon=True)
+    metrics_thread.start()
+    
+    # Start OHLCV consumer in main thread (blocks)
+    consume_ohlcv()
 
 if __name__ == '__main__':
     run()

@@ -6,7 +6,7 @@ Comprehensive unit tests for the Torii Risk Engine's User-Defined Functions (UDF
 
 ## Test Coverage
 
-**Total Tests**: 12  
+**Total Tests**: 17
 **Status**: ✅ All Passing  
 **Runtime**: <0.01s
 
@@ -36,6 +36,15 @@ Comprehensive unit tests for the Torii Risk Engine's User-Defined Functions (UDF
 | `test_liquidity_mismatched_lengths` | Returns `None` for unequal arrays | Safety check |
 | `test_liquidity_zero_variance` | High score for constant price | Formula correctness |
 | `test_liquidity_comparison` | High vol/low var > Low vol/high var | Relative scoring |
+### CVaR / Expected Shortfall Tests (5 tests)
+
+| Test | Description | Validates |
+|------|-------------|-----------|
+| `test_cvar_simple` | CVaR = -10% for uniform losses | Calculation accuracy |
+| `test_cvar_tail_average` | CVaR = Avg(Worst N) | Tail aggregation logic |
+| `test_cvar_insufficient_data` | Returns `None` error | Input validation |
+| `test_cvar_boundary_conditions` | 0.0 < Confidence < 1.0 | Mathematical bounds |
+| `test_cvar_single_value` | Single value is its own tail | Edge case handling |
 
 ## Running Tests
 
@@ -55,12 +64,17 @@ rustc --test udf_indicators.rs
 ## Test Results
 
 ```
-running 12 tests
-test tests::test_liquidity_comparison ... ok
+running 17 tests
+test tests::test_cvar_boundary_conditions ... ok
+test tests::test_cvar_simple ... ok
+test tests::test_cvar_insufficient_data ... ok
 test tests::test_liquidity_insufficient_data ... ok
+test tests::test_liquidity_comparison ... ok
+test tests::test_cvar_tail_average ... ok
 test tests::test_liquidity_mismatched_lengths ... ok
 test tests::test_liquidity_zero_variance ... ok
 test tests::test_rsi_all_gains ... ok
+test tests::test_cvar_single_value ... ok
 test tests::test_rsi_all_losses ... ok
 test tests::test_rsi_bounds ... ok
 test tests::test_rsi_insufficient_data ... ok
@@ -69,7 +83,7 @@ test tests::test_volatility_insufficient_data ... ok
 test tests::test_volatility_positive ... ok
 test tests::test_volatility_zero_variance ... ok
 
-test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured
 ```
 
 ## Key Validation Points
