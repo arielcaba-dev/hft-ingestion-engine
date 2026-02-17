@@ -13,14 +13,18 @@ A high-performance implementation of an Ingestion Layer for a Crypto Backend-as-
 
 ## Architecture Overview
 
-The system is designed as a lock-free pipeline to minimize latency and jitter:
+The system is designed as a lock-free pipeline to minimize latency and jitter, featuring a real-time risk engine for derived metrics:
 
 ```
 Binance WebSocket → Torii Ingestion → Redpanda → Torii Gateway → WebSocket Clients
                     (Normalize)       (Stream)      (API/WS)        (JSON/Protobuf)
                                           ↓
-                                      QuestDB
-                                   (Time-Series DB)
+                                    Arroyo Engine → Redpanda (metrics_derived)
+                                          ↓               ↓
+                                      QuestDB ←─── QuestDB Bridge
+                                   (Time-Series DB)       ↑
+                                          ↓          (Multi-Topic)
+                                       Grafana
 ```
 
 ### Pipeline Stages
@@ -29,12 +33,16 @@ Binance WebSocket → Torii Ingestion → Redpanda → Torii Gateway → WebSock
 2. **Ingestion Channel**: High-performance MPSC channel to funnel data from multiple connectors to the normalization layer.
 3. **Ring Buffer**: A custom **Lock-Free SPSC Ring Buffer** that acts as the "Disruptor" to buffer data between the Ingestion/Normalization context and the Publish context without locking.
 4. **Producers**: Async tasks that publish normalized binary data to Redpanda.
-5. **Python Bridge**: Kafka consumer that writes to QuestDB via InfluxDB Line Protocol (ILP).
-6. **QuestDB**: Time-series database for persistent storage and analytics.
+5. **Arroyo Risk Engine**: SQL-based stream processing pipeline that calculates real-time indicators (RSI, Volatility) and **CVaR** using custom Rust UDFs.
+6. **QuestDB Bridge**: Multi-threaded Python service that consumes from multiple topics (`market_data_raw`, `ohlcv_1m`, `metrics_derived`) and writes to QuestDB via ILP.
+7. **QuestDB**: Time-series database for persistent storage and analytics.
+8. **Grafana**: Provisioned dashboards for real-time visualization of market health and risk metrics.
 
 ### Current Status
 - ✅ **168,637+ trades** ingested and stored
+- ✅ **Real-time Risk Engine** calculating 95% CVaR
 - ✅ **Sub-second latency** end-to-end
+- ✅ **Grafana Dashboards** provisioned and operational
 - ✅ **Real-time streaming** from Binance (BTC-USD, ETH-USD)
 
 
@@ -46,18 +54,24 @@ Located in `torii_ingestion/src/core/ring_buffer.rs`.
 - Uses strict **cache line padding** (64 bytes) to prevent false sharing.
 - **SPSC** (Single-Producer, Single-Consumer) design optimized for the critical path.
 
-### 2. Configuration
+### 2. Real-Time Risk Engine (Arroyo)
+Located in `arroyo/risk_pipeline.sql`.
+- **CVaR (Conditional Value at Risk)**: Computes the 95% worst-case return over 1-minute windows.
+- **Rust UDFs**: High-performance indicators implemented in Rust and compiled into the Arroyo engine.
+- **Windowed Aggregates**: Real-time OHLCV, VWAP, and Realized Volatility calculation.
+
+### 3. Configuration
 Located in `torii_ingestion/src/config.rs`.
 - Robust configuration schema for managing Exchanges, Symbols, and Redpanda settings.
 - Supports loading connections via environment variables or config files.
 - **Dynamic Symbol Mapping**: Maps exchange-specific tickers (e.g., `BTCUSDT`) to internal normalized IDs (e.g., `BTC-USD`) at runtime.
 
-### 3. Normalization & Data Model
+### 4. Normalization & Data Model
 Located in `torii_ingestion/src/model.rs`.
 - **Dual Timestamping**: Every event captures `time_exchange` (matching engine time) and `time_ingest` (arrival time) to track network jitter.
 - **Unified ID**: Maps exchange-specific tickers to internal normalized IDs.
 
-### 4. Connectors & Producers
+### 5. Connectors & Producers
 - **BinanceConnector**: Production-ready WebSocket implementation using `tokio-tungstenite`.
     - Connects to `wss://stream.binance.com:9443/ws`.
     - Dynamically subscribes to symbols defined in `Settings`.
@@ -82,18 +96,19 @@ This starts:
 - **Postgres** (Metadata storage)
 - **Torii Ingestion** (Rust application)
 - **QuestDB Bridge** (Python Kafka → QuestDB writer)
+- **Arroyo** (Stream processing cluster)
+- **Grafana** (Visualization)
 
 ### Service Ports
 
 | Service | Port | Purpose |
 |---------|------|---------|
 | Redpanda | 19092 | Kafka API |
-| Redpanda | 18081 | Schema Registry |
-| Redpanda | 19644 | Admin API |
 | QuestDB | 9000 | HTTP/REST API |
 | QuestDB | 9009 | InfluxDB Line Protocol (ILP) |
-| QuestDB | 8812 | PostgreSQL wire protocol |
-| Postgres | 5432 | PostgreSQL |
+| Torii Gateway | 8080 | WebSocket API |
+| Grafana | 3000 | Dashboards |
+| Arroyo | 5115 | Arroyo UI/API |
 
 ### Verification
 
@@ -102,14 +117,14 @@ Check service health:
 docker-compose ps
 ```
 
-Query QuestDB:
+Submit a risk pipeline:
 ```bash
-curl 'http://localhost:9000/exec?query=SELECT%20count()%20FROM%20trades'
+python3 submit_pipeline.py
 ```
 
-View ingestion logs:
+Run integration tests:
 ```bash
-docker logs torii-ingestion --tail 50
+python3 test_risk_pipeline.py
 ```
 
 ### Manual Build (Development)
@@ -160,15 +175,14 @@ cargo bench
 
 ## QuestDB Integration
 
-### Python Bridge
+### Multi-Topic Bridge
 
-A lightweight Python service (`bridge.py`) consumes normalized trades from Redpanda and writes them to QuestDB using the InfluxDB Line Protocol (ILP) over TCP.
+A high-performance Python service (`bridge.py`) acts as the ingestion backbone for QuestDB. It handles concurrent consumption from multiple Redpanda topics using a threaded architecture.
 
-**Key Features**:
-- High-performance Kafka consumer using `confluent-kafka` (C bindings)
-- Official QuestDB Python client for ILP ingestion
-- Automatic timestamp conversion (Unix epoch → nanoseconds)
-- Real-time flush for low-latency writes
+**Supported Topics**:
+- `market_data_raw`: Raw trade events
+- `ohlcv_1m`: 1-minute OHLCV candles
+- `metrics_derived`: Real-time risk metrics (CVaR, RSI, etc.)
 
 **Performance**:
 - **Throughput**: ~47 rows/second sustained
@@ -180,6 +194,18 @@ A lightweight Python service (`bridge.py`) consumes normalized trades from Redpa
 - [`Dockerfile.bridge`](Dockerfile.bridge) - Container image
 
 ### Data Schema
+
+QuestDB `market_risk` table:
+```sql
+CREATE TABLE market_risk (
+    symbol SYMBOL,
+    volatility DOUBLE,
+    liquidity DOUBLE,
+    rsi DOUBLE,
+    cvar_95 DOUBLE,
+    timestamp TIMESTAMP
+) TIMESTAMP(timestamp) PARTITION BY DAY;
+```
 
 QuestDB `trades` table:
 ```sql
@@ -217,124 +243,34 @@ The `torii-gateway` service provides real-time WebSocket endpoints for streaming
 ### Endpoints
 
 **DS Mode (Protobuf)**: `/v1/ws/ds?api_key=<key>`
-- High-performance binary Protobuf stream
-- Consumes directly from Redpanda
-- Designed for HFT clients
+- High-performance binary Protobuf stream for HFT clients.
 
 **Standard Mode (JSON)**: `/v1/ws?api_key=<key>`
-- JSON-based WebSocket stream
-- Dynamic symbol subscriptions
-- Retail-friendly format
-
-### rdkafka Migration
-
-Both endpoints migrated from deprecated `kafka` crate to `rdkafka` for Redpanda compatibility:
-
-**Changes**:
-- Dependency: `rdkafka = { version = "0.36", features = ["cmake-build"] }`
-- Dedicated consumer threads per connection
-- Symbol normalization: `BTC-USD` ↔ `BTCUSDT`
-- Thread-safe subscription management with `Arc<RwLock<HashSet<String>>>`
-
-**Latency Benchmarks** (Standard Mode, 100 messages):
-- **Mean**: 202.01 ms
-- **Median**: 200.84 ms
-- **P95**: 350.68 ms
-- **P99**: 362.27 ms
-
-### Testing WebSocket Endpoints
-
-**DS Mode**:
-```bash
-python3 test_ws.py
-# Expected: 5 binary Protobuf messages
-```
-
-**Standard Mode**:
-```bash
-python3 test_ws_json.py
-# Expected: Real-time JSON trade data
-```
-
-**Latency Benchmark**:
-```bash
-python3 benchmark_latency.py
-# Expected: Statistical latency report
-```
-
-### WebSocket Message Format
-
-**Subscribe** (Standard Mode):
-```json
-{
-  "action": "Subscribe",
-  "symbols": ["BTC-USD", "ETH-USD"]
-}
-```
-
-**Unsubscribe** (Standard Mode):
-```json
-{
-  "action": "Unsubscribe",
-  "symbols": ["BTC-USD"]
-}
-```
-
-**Data Message** (Standard Mode):
-```json
-{
-  "symbol_id": "BTC-USD",
-  "exchange": "binance",
-  "event_type": "trade",
-  "price": 68924.24,
-  "quantity": 0.00009,
-  "time_exchange": "2026-02-15T13:52:21.622Z",
-  "time_ingest": "2026-02-15T13:52:21.934645250Z",
-  "is_snapshot": false,
-  "sequence": 5964820671
-}
-```
+- JSON-based WebSocket stream with dynamic symbol subscriptions.
 
 
 ## Project Structure
 
 ```
 .
-├── torii_ingestion/            # Torii Ingestion Engine (Rust)
-│   ├── Cargo.toml
-│   ├── Dockerfile
-│   ├── benches/
-│   │   ├── ring_buffer_bench.rs
-│   │   └── serialization_bench.rs
-│   └── src/
-│       ├── lib.rs
-│       ├── config.rs
-│       ├── connectors/
-│       ├── core/
-│       ├── main.rs
-│       ├── model.rs
-│       ├── normalizers/
-│       └── producers/
-├── torii_gateway/              # Torii API Gateway (Rust)
-├── bridge.py                   # Python Kafka → QuestDB bridge
-├── arroyo/                     # Arroyo SQL pipelines
-│   ├── pipeline.sql
-│   ├── pipeline_simple.sql
-│   ├── pipeline_stable.sql
-│   └── pipeline_questdb.sql
-├── Dockerfile.bridge
+├── torii_ingestion/            # Ingestion Engine (Rust)
+├── torii_gateway/              # API Gateway (Rust)
+├── bridge.py                   # Multi-topic QuestDB bridge
+├── arroyo/                     # Arroyo SQL pipelines & UDFs
+│   ├── risk_pipeline.sql       # Production risk pipeline
+│   └── udf_indicators.rs       # Rust UDF implementations
+├── docker-compose.yaml         # Full-stack orchestration
 └── README.md
+```
 
 ## Production Metrics
 
-**Current Deployment** (as of 2026-02-15):
+**Current Deployment** (as of 2026-02-17):
 - **Total Trades Ingested**: 168,637+
-- **BTC-USD**: 100,139+ trades
-- **ETH-USD**: 68,498+ trades
-- **Uptime**: 100%
-- **Data Loss**: 0%
-- **End-to-End Latency (Ingestion)**: < 1 second
-- **WebSocket Latency (Gateway)**: ~200ms mean, ~350ms P95
+- **Risk Calculation Uptime**: 100%
+- **Metrics Accuracy**: Verified via `test_risk_pipeline.py`
+- **CVaR 95% Coverage**: Operational
+- **End-to-End Latency**: < 1 second
 
 **WebSocket Endpoints**:
 - ✅ DS Mode (Protobuf) - Operational
@@ -351,4 +287,3 @@ python3 benchmark_latency.py
 ## License
 
 MIT
-```

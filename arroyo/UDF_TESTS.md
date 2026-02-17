@@ -105,10 +105,10 @@ test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured
 
 ## Next Steps
 
-1. **Integration Tests**: Verify UDFs work within Arroyo pipeline
-2. **Property-Based Tests**: Add `proptest` for fuzzing
-3. **Benchmark Tests**: Measure performance at scale
-4. **Reference Validation**: Compare RSI output against `ta-lib`
+1.  **Production Monitoring**: Monitor Arroyo job stability and QuestDB ingestion rates.
+2.  **Property-Based Tests**: Add `proptest` for fuzzing indicators.
+3.  **Benchmark Tests**: Measure performance at scale.
+4.  **Reference Validation**: Compare RSI output against `ta-lib` or similar tools.
 
 ## Related Files
 

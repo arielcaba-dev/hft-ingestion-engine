@@ -1,3 +1,4 @@
+use axum::{async_trait, extract::FromRequestParts, http::request::Parts, http::StatusCode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -16,4 +17,20 @@ pub struct AuthContext {
 pub struct User {
     pub id: Uuid,
     pub email: String,
+}
+
+#[async_trait]
+impl<S> FromRequestParts<S> for AuthContext
+where
+    S: Send + Sync,
+{
+    type Rejection = StatusCode;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        parts
+            .extensions
+            .get::<AuthContext>()
+            .cloned()
+            .ok_or(StatusCode::UNAUTHORIZED)
+    }
 }

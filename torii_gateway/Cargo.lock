@@ -85,6 +85,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f0e0fee31ef5ed1ba1316088939cea399010ed7731dba877ed44aeb407a75ea"
 
 [[package]]
+name = "argon2"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c3610892ee6e0cbce8ae2700349fcf8f98adb0dbfbee85aec3c9179d29cc072"
+dependencies = [
+ "base64ct",
+ "blake2",
+ "cpufeatures",
+ "password-hash",
+]
+
+[[package]]
 name = "arrow"
 version = "50.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -828,7 +840,7 @@ dependencies = [
  "sha1",
  "sync_wrapper 1.0.2",
  "tokio",
- "tokio-tungstenite",
+ "tokio-tungstenite 0.24.0",
  "tower 0.5.3",
  "tower-layer",
  "tower-service",
@@ -933,6 +945,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "843867be96c8daad0d758b57df9392b6d8d271134fce549de6ce169ff98a92af"
 dependencies = [
  "serde_core",
+]
+
+[[package]]
+name = "blake2"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46502ad458c9a52b69d4d4d32775c788b7a1b85e8bc9d482d92250fc0e3f8efe"
+dependencies = [
+ "digest",
 ]
 
 [[package]]
@@ -2826,6 +2847,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "password-hash"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "346f04948ba92c43e8469c1ee6736c7563d71012b17d40745260fe106aac2166"
+dependencies = [
+ "base64ct",
+ "rand_core 0.6.4",
+ "subtle",
+]
+
+[[package]]
 name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3177,7 +3209,6 @@ version = "4.10.0+2.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e234cf318915c1059d4921ef7f75616b5219b10b46e9f3a511a15eb4b56a3f77"
 dependencies = [
- "cmake",
  "libc",
  "libz-sys",
  "num_enum",
@@ -4279,6 +4310,18 @@ dependencies = [
 
 [[package]]
 name = "tokio-tungstenite"
+version = "0.20.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "212d5dcb2a1ce06d81107c3d0ffa3121fe974b73f068c8282cb1c32328113b6c"
+dependencies = [
+ "futures-util",
+ "log",
+ "tokio",
+ "tungstenite 0.20.1",
+]
+
+[[package]]
+name = "tokio-tungstenite"
 version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "edc5f74e248dc973e0dbb7b74c7e0d6fcc301c694ff50049504004ef4d0cdcd9"
@@ -4286,7 +4329,7 @@ dependencies = [
  "futures-util",
  "log",
  "tokio",
- "tungstenite",
+ "tungstenite 0.24.0",
 ]
 
 [[package]]
@@ -4345,6 +4388,7 @@ dependencies = [
 name = "torii_gateway"
 version = "0.1.0"
 dependencies = [
+ "argon2",
  "arrow",
  "aws-config",
  "aws-sdk-s3",
@@ -4355,6 +4399,7 @@ dependencies = [
  "dotenv",
  "env_logger",
  "futures",
+ "futures-util",
  "hex",
  "log",
  "parquet",
@@ -4370,10 +4415,12 @@ dependencies = [
  "sqlx",
  "thiserror",
  "tokio",
+ "tokio-tungstenite 0.20.1",
  "tower 0.4.13",
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "url",
  "uuid",
 ]
 
@@ -4513,6 +4560,25 @@ name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
+
+[[package]]
+name = "tungstenite"
+version = "0.20.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e3dac10fd62eaf6617d3a904ae222845979aec67c615d1c842b4002c7666fb9"
+dependencies = [
+ "byteorder",
+ "bytes",
+ "data-encoding",
+ "http 0.2.12",
+ "httparse",
+ "log",
+ "rand 0.8.5",
+ "sha1",
+ "thiserror",
+ "url",
+ "utf-8",
+]
 
 [[package]]
 name = "tungstenite"

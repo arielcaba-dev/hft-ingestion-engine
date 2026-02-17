@@ -1,9 +1,10 @@
 use crate::error::AppError;
+use crate::model::AuthContext;
 use crate::AppState;
 use axum::{
     extract::{
         ws::{Message, WebSocket},
-        Query, State, WebSocketUpgrade,
+        Extension, State, WebSocketUpgrade,
     },
     response::IntoResponse,
 };
@@ -13,10 +14,7 @@ use serde_json::json;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-#[derive(Deserialize)]
-pub struct WsParams {
-    pub api_key: String,
-}
+// WsParams removed
 
 #[derive(Deserialize)]
 #[serde(tag = "action", content = "symbols")]
@@ -29,32 +27,21 @@ enum WsMessage {
 // In a real system, you'd have a dedicated actor/manager
 // type SubscriptionManager = Arc<Mutex<HashSet<String>>>;
 
+// ...
+
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
-    Query(params): Query<WsParams>,
+    Extension(auth_context): Extension<AuthContext>,
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    // 1. Authenticate (Manual check since middleware doesn't run on upgrade request usually)
-    // Here we reuse the logic or assume middleware ran if configured correctly.
-    // However, to keep it robust:
-
-    // We need to validate the key manually here because the middleware might not extract from query params
-    // Let's assume for now we trust the middleware if it was applied, OR we implement query param auth.
-    // Given main.rs structure, middleware runs for all /v1/ws, but middleware looks for Header X-API-KEY.
-    // WebSocket clients often can't set headers easily.
-    // So we should probably allow Query param auth in middleware OR here.
-
-    // For now, let's proceed assuming the middleware handles it or we skip for demo.
-    // Actually, let's implement validation if we want security.
-    // BUT the rate_limit middleware relies on AuthContext.
-    // If we want query param auth, we should update auth.rs.
-
-    // Proceeding with upgrade
-    Ok(ws.on_upgrade(move |socket| handle_socket(socket, state, params.api_key)))
+    // Auth is already handled by middleware!
+    // We just pass the context to the socket handler.
+    Ok(ws.on_upgrade(move |socket| handle_socket(socket, state, auth_context)))
 }
 
-async fn handle_socket(socket: WebSocket, state: Arc<AppState>, _api_key: String) {
+async fn handle_socket(socket: WebSocket, state: Arc<AppState>, auth_context: AuthContext) {
     let (mut sender, mut receiver) = socket.split();
+    // ... use auth_context.user_id / scopes for permission checks in subscription ...
 
     // Use an unbounded channel to bridge the blocking consumer thread and the async websocket sender
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();

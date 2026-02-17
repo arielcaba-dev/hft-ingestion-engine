@@ -4,25 +4,20 @@ mod error;
 mod handlers;
 mod middleware;
 mod model;
+mod state; // New state module
 mod ws;
 
+use crate::state::AppState;
 use axum::{
     middleware::from_fn_with_state,
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 use config::GatewayConfig;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tracing::info;
-
-pub struct AppState {
-    pub config: GatewayConfig,
-    pub db: sqlx::PgPool,
-    pub questdb: sqlx::PgPool,
-    pub redis: redis::Client,
-}
+use tracing::{error, info};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -47,23 +42,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Failed to run migrations");
 
     // Connect to QuestDB (PG Wire)
+    // Using connect_lazy to avoid hanging if QuestDB is not ready immediately
     let questdb_pool = PgPoolOptions::new()
         .max_connections(5)
-        .connect(&config.questdb_pg_url)
-        .await
-        .expect("Failed to connect to QuestDB");
+        .connect_lazy(&config.questdb_pg_url)
+        .expect("Failed to create QuestDB pool");
 
     // Connect to Redis
-    let redis_client = redis::Client::open(config.redis_url.clone())?;
+    info!("Connecting to Redis at {}", config.redis_url);
+    let redis_client = redis::Client::open(config.redis_url.clone()).map_err(|e| {
+        error!("Invalid Redis URL: {}", e);
+        e
+    })?;
+
+    // Allow connection to verify
+    let mut conn = redis_client
+        .get_multiplexed_async_connection()
+        .await
+        .map_err(|e| {
+            error!("Failed to connect to Redis: {}", e);
+            e
+        })?;
+    info!("Redis connected successfully");
 
     let state = Arc::new(AppState {
         config: config.clone(),
-        db: pool,
+        pool: pool,
         questdb: questdb_pool,
         redis: redis_client,
     });
 
+    // Start Billing Task
+    let billing_state = state.clone();
+    tokio::spawn(async move {
+        billing::start_billing_sync(billing_state).await;
+    });
+
     // Build Router
+    info!("Building router...");
     let app = Router::new()
         .route("/health", get(handlers::health::health_check))
         .route("/v1/mcp", post(handlers::mcp::mcp_handler))
@@ -81,15 +97,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/v1/market/recent-trades",
             get(handlers::market::get_recent_trades),
         )
+        .route("/v1/keys", post(handlers::keys::create_api_key))
+        .route("/v1/keys/:id", delete(handlers::keys::revoke_api_key))
         .layer(from_fn_with_state(
             state.clone(),
-            middleware::rate_limit::rate_limit_middleware,
+            middleware::rate_limit_middleware,
+        ))
+        .layer(from_fn_with_state(
+            state.clone(),
+            middleware::auth_middleware,
         ))
         .with_state(state);
 
     // Start Server
-    let listener = TcpListener::bind(format!("0.0.0.0:{}", config.server_port)).await?;
-    axum::serve(listener, app).await?;
+    let addr = format!("0.0.0.0:{}", config.server_port);
+    info!("Binding to address: {}", addr);
+    let listener = TcpListener::bind(&addr).await.map_err(|e| {
+        error!("Failed to bind to address {}: {}", addr, e);
+        e
+    })?;
+
+    info!("Axum server starting...");
+    axum::serve(listener, app).await.map_err(|e| {
+        error!("Server error: {}", e);
+        e
+    })?;
 
     Ok(())
 }

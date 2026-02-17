@@ -28,12 +28,18 @@ reqwest = { version = "0.11", features = ["json"] }
 prost = "0.12"
 prost-types = "0.12"
 # Kafka/Redpanda support (via librdkafka for modern protocol support)
-rdkafka = { version = "0.36", features = ["cmake-build"] }
+rdkafka = { version = "0.36" }
 futures = "0.3"
 aws-sdk-s3 = "1.0"
 aws-config = "1.0"
 parquet = "50.0"
 arrow = "50.0"
+argon2 = "0.5.3"
 
 [build-dependencies]
 prost-build = "0.12"
+
+[dev-dependencies]
+tokio-tungstenite = "0.20"
+url = "2.4"
+futures-util = "0.3"

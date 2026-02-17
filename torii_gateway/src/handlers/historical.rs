@@ -1,7 +1,7 @@
-use crate::billing::Billing;
+use crate::billing::deduct_credits;
 use crate::error::AppError;
 use crate::model::AuthContext;
-use crate::AppState;
+use crate::state::AppState;
 use axum::{
     extract::{Query, State},
     response::{IntoResponse, Redirect, Response},
@@ -30,7 +30,14 @@ pub async fn historical_handler(
     // Detailed cost calculation should happen after we know the count, but we need to deduct first or during.
     // Let's deduct a base fee first.
     let base_cost = 10;
-    Billing::deduct_credits(&state, auth.user_id, base_cost).await?;
+    deduct_credits(&state, auth.user_id, base_cost)
+        .await
+        .map_err(|e| match e {
+            axum::http::StatusCode::PAYMENT_REQUIRED => {
+                AppError::PaymentRequired("Insufficient credits".into())
+            }
+            _ => AppError::Internal("Billing error".into()),
+        })?;
 
     // 2. Check Row Count
     // Mocking check for now. In prod: SELECT count() FROM trades WHERE symbol = ...

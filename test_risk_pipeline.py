@@ -5,10 +5,12 @@ import random
 from confluent_kafka import Producer
 from datetime import datetime, timezone
 
+import os
+
 # Configuration
-REDPANDA_BROKERS = "localhost:19092"
-QUESTDB_URL = "http://localhost:9000/exec"
-TOPIC = "market_data_v2"
+REDPANDA_BROKERS = os.getenv('REDPANDA_BROKERS', "localhost:19092")
+QUESTDB_URL = os.getenv('QUESTDB_URL', "http://localhost:9000/exec")
+TOPIC = "market_data_raw"
 
 # Initialize Producer
 conf = {'bootstrap.servers': REDPANDA_BROKERS}
@@ -144,3 +146,9 @@ if __name__ == "__main__":
     # Better to just wait.
     
     check_kafka_ohlcv()
+    
+    # Check QuestDB
+    print("\nWaiting for QuestDB ingestion...")
+    import time
+    time.sleep(5)
+    check_questdb_metrics()

@@ -21,13 +21,13 @@ RUN apt-get update && \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+# 2. Install Rust Toolchain (Required for UDF Compilation)
+# We bake this in to avoid runtime timeouts when Arroyo tries to let workers install it
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
 # 3. Environment Setup
 # Ensure clang is in the path for bindgen
 # Note: Adjust llvm version based on what apt-get installs (usually 14 or 15)
 ENV LIBCLANG_PATH=/usr/lib/llvm-14/lib
 ENV LLVM_CONFIG_PATH=/usr/bin/llvm-config-14
-
-# Switch back to arroyo user if the base image uses one
-# USER arroyo
-
-# Use the default entrypoint and command from base image
