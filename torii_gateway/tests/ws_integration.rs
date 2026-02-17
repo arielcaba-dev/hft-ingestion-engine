@@ -66,4 +66,66 @@ async fn test_ws_authentication_flow() {
     } else {
         panic!("Connection closed unexpectedly");
     }
+
+    // 5. Test End-to-End Data Flow (Redpanda -> WebSocket)
+    // Produce a message to Redpanda
+    use rdkafka::config::ClientConfig;
+    use rdkafka::producer::{FutureProducer, FutureRecord};
+    use std::time::Duration;
+
+    let producer: FutureProducer = ClientConfig::new()
+        .set("bootstrap.servers", "localhost:19092")
+        .set("message.timeout.ms", "5000")
+        .create()
+        .expect("Producer creation error");
+
+    let payload = json!({
+        "symbol_id": "BTC-USD",
+        "price": 50100.0,
+        "quantity": 0.5,
+        "timestamp": 1234567891
+    })
+    .to_string();
+
+    // Give the Gateway's consumer some time to initialize/rebalance
+    tokio::time::sleep(Duration::from_secs(3)).await;
+
+    println!("Producing message: {}", payload);
+    let delivery_status = producer
+        .send(
+            FutureRecord::to("market_data_raw")
+                .payload(&payload)
+                .key("BTC-USD"),
+            Duration::from_secs(5),
+        )
+        .await;
+
+    assert!(
+        delivery_status.is_ok(),
+        "Failed to produce message to Redpanda"
+    );
+
+    // Expect the message on WebSocket
+    // We might need to wait a bit or loop, but since we just subscribed, it should come.
+    // Give it a few seconds timeout
+    let timeout = tokio::time::sleep(Duration::from_secs(5));
+    tokio::pin!(timeout);
+
+    loop {
+        tokio::select! {
+            Some(msg) = read.next() => {
+                let msg = msg.expect("Error reading message");
+                if let Message::Text(text) = msg {
+                    println!("Received Data: {}", text);
+                    if text.contains("50100.0") {
+                        // Success!
+                        break;
+                    }
+                }
+            }
+            _ = &mut timeout => {
+                panic!("Timed out waiting for data from Redpanda");
+            }
+        }
+    }
 }
