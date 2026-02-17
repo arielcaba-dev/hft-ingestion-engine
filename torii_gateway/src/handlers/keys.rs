@@ -1,8 +1,4 @@
 use crate::state::AppState;
-use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
-    Argon2,
-};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -40,11 +36,13 @@ pub async fn create_api_key(
     let key_hash = format!("{:x}", hasher.finalize());
 
     // 3. Store in DB
+    let key_prefix = &plain_key[..8];
     let row = sqlx::query(
-        "INSERT INTO api_keys (user_id, key_hash, scopes) VALUES ($1, $2, $3) RETURNING id",
+        "INSERT INTO api_keys (user_id, key_hash, key_prefix, scopes) VALUES ($1, $2, $3, $4) RETURNING id",
     )
     .bind(payload.user_id)
     .bind(key_hash)
+    .bind(key_prefix)
     .bind(&payload.scopes)
     .fetch_one(&state.pool)
     .await

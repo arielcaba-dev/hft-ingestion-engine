@@ -1,9 +1,8 @@
 use crate::state::AppState;
 use axum::http::StatusCode;
 use redis::AsyncCommands;
-use sqlx::PgPool;
 use std::sync::Arc;
-use tokio::time::{sleep, Duration};
+use tokio::time::Duration;
 
 pub async fn start_billing_sync(state: Arc<AppState>) {
     let mut interval = tokio::time::interval(Duration::from_secs(10));

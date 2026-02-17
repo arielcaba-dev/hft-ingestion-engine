@@ -39,7 +39,7 @@ pub async fn ws_handler(
     Ok(ws.on_upgrade(move |socket| handle_socket(socket, state, auth_context)))
 }
 
-async fn handle_socket(socket: WebSocket, state: Arc<AppState>, auth_context: AuthContext) {
+async fn handle_socket(socket: WebSocket, state: Arc<AppState>, _auth_context: AuthContext) {
     let (mut sender, mut receiver) = socket.split();
     // ... use auth_context.user_id / scopes for permission checks in subscription ...
 
@@ -114,41 +114,66 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, auth_context: Au
     // Handle incoming messages (Subscriptions) and outgoing messages (Data)
     // We need to select! between rx (data) and receiver (commands)
 
+    let mut heartbeat_interval = tokio::time::interval(std::time::Duration::from_secs(5));
+    heartbeat_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
     loop {
         tokio::select! {
+             _ = heartbeat_interval.tick() => {
+                // Send Ping to keep connection alive
+                if sender.send(Message::Ping(vec![])).await.is_err() {
+                    // Client disconnected
+                    break;
+                }
+            }
             Some(msg) = rx.recv() => {
                 if sender.send(Message::Text(msg)).await.is_err() {
                     break;
                 }
             }
-            Some(Ok(msg)) = receiver.next() => {
-                 if let Message::Text(text) = msg {
-                    if let Ok(action) = serde_json::from_str::<WsMessage>(&text) {
-
-                        match action {
-                            WsMessage::Subscribe(symbols) => {
-                                let count = {
-                                    let mut subs = subscribed_symbols.write().unwrap();
-                                    for symbol in symbols {
-                                        subs.insert(symbol);
+            Some(msg_res) = receiver.next() => {
+                 match msg_res {
+                    Ok(msg) => {
+                        match msg {
+                            Message::Text(text) => {
+                                if let Ok(action) = serde_json::from_str::<WsMessage>(&text) {
+                                    match action {
+                                        WsMessage::Subscribe(symbols) => {
+                                            let count = {
+                                                let mut subs = subscribed_symbols.write().unwrap();
+                                                for symbol in symbols {
+                                                    subs.insert(symbol);
+                                                }
+                                                subs.len()
+                                            };
+                                            let _ = sender.send(Message::Text(json!({"status": "subscribed", "count": count}).to_string())).await;
+                                        }
+                                        WsMessage::Unsubscribe(symbols) => {
+                                            let count = {
+                                                 let mut subs = subscribed_symbols.write().unwrap();
+                                                 for symbol in symbols {
+                                                     subs.remove(&symbol);
+                                                 }
+                                                 subs.len()
+                                            };
+                                            let _ = sender.send(Message::Text(json!({"status": "unsubscribed", "count": count}).to_string())).await;
+                                        }
                                     }
-                                    subs.len()
-                                };
-                                let _ = sender.send(Message::Text(json!({"status": "subscribed", "count": count}).to_string())).await;
+                                }
                             }
-                            WsMessage::Unsubscribe(symbols) => {
-                                let count = {
-                                    let mut subs = subscribed_symbols.write().unwrap();
-                                    for symbol in symbols {
-                                        subs.remove(&symbol);
-                                    }
-                                    subs.len()
-                                };
-                                let _ = sender.send(Message::Text(json!({"status": "unsubscribed", "count": count}).to_string())).await;
+                            Message::Close(_) => {
+                                // Client sent close frame
+                                break;
                             }
+                            Message::Pong(_) => {
+                                // Received Pong, connection is healthy
+                                // We could track last_seen here for strict timeout
+                            }
+                            _ => {} // Ignore other messages
                         }
                     }
-                }
+                    Err(_) => break, // Connection error
+                 }
             }
             else => break, // Channel closed
         }

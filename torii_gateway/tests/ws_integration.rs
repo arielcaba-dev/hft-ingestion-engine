@@ -3,8 +3,8 @@ use serde_json::json;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use url::Url;
 
-const BASE_URL: &str = "http://localhost:8085";
-const WS_URL: &str = "ws://localhost:8085/v1/ws";
+const BASE_URL: &str = "http://localhost:8080";
+const WS_URL: &str = "ws://localhost:8080/v1/ws";
 const BOOTSTRAP_KEY: &str = "bootstrap_key";
 
 #[tokio::test]
@@ -16,7 +16,7 @@ async fn test_ws_authentication_flow() {
         .header("Content-Type", "application/json")
         .header("X-API-KEY", BOOTSTRAP_KEY)
         .json(&json!({
-            "user_id": "a13a091f-6932-42e7-bf8d-880893e5578e",
+            "user_id": "8498d5ad-674b-40a7-8d31-ab09d2eeb7e8", // Known existing user ID
             "scopes": ["market:read"]
         }))
         .send()
@@ -111,21 +111,80 @@ async fn test_ws_authentication_flow() {
     let timeout = tokio::time::sleep(Duration::from_secs(5));
     tokio::pin!(timeout);
 
+    // 5. Test End-to-End Data Flow (Redpanda -> WebSocket)
+    // ... (Redpanda/Producer setup skipped for brevity in tool call, ensuring context) ...
+    // (We will keep the existing test flow and ADD the ping check at the end or in the loop)
+
+    // Let's modify the loop to also look for Pings.
+    // We already have a loop waiting for data.
+    // If we receive a Ping, that's good!
+
+    let mut received_data = false;
+    let mut received_ping = false;
+
     loop {
         tokio::select! {
-            Some(msg) = read.next() => {
+             Some(msg) = read.next() => {
                 let msg = msg.expect("Error reading message");
-                if let Message::Text(text) = msg {
-                    println!("Received Data: {}", text);
-                    if text.contains("50100.0") {
-                        // Success!
-                        break;
+                match msg {
+                    Message::Text(text) => {
+                        println!("Received Data: {}", text);
+                        if text.contains("50100.0") {
+                            received_data = true;
+                        }
                     }
+                    Message::Ping(_) => {
+                        println!("Received Ping!");
+                        received_ping = true;
+                    }
+                    _ => {}
+                }
+
+                if received_data && received_ping {
+                    break;
                 }
             }
             _ = &mut timeout => {
-                panic!("Timed out waiting for data from Redpanda");
+                // If we timed out but got data, standard test passed.
+                // But we WANT to see a ping.
+                // The Ping interval is 5s. Timeout is 5s. Race condition.
+                // Let's rely on the immediate first tick or extend timeout.
+                if received_data {
+                     println!("Got data but valid Ping might be delayed or swallowed by client lib.");
+                     // For this specific test, if we got data, we are good on the "E2E" part.
+                     // But to verify Ping, we might need to wait longer.
+                     // Let's extend timeout to 7s if data received but no ping.
+                }
+                break; // Break the select loop
             }
         }
     }
+
+    // Check results
+    if !received_data {
+        panic!("Timed out waiting for Redpanda data");
+    }
+    // We strictly want to verify Ping now.
+    // If we haven't received it yet, wait a bit more.
+    if !received_ping {
+        println!("Waiting for Ping...");
+        let ping_timeout = tokio::time::sleep(Duration::from_secs(6));
+        tokio::pin!(ping_timeout);
+        loop {
+            tokio::select! {
+                Some(msg) = read.next() => {
+                     if let Ok(Message::Ping(_)) = msg {
+                         println!("Received Ping (delayed)!");
+                         received_ping = true;
+                         break;
+                     }
+                }
+                _ = &mut ping_timeout => {
+                    break;
+                }
+            }
+        }
+    }
+
+    assert!(received_ping, "Did not receive Heartbeat Ping from server");
 }

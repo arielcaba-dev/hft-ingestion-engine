@@ -4,18 +4,13 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use redis::{AsyncCommands, Client as RedisClient};
 use serde::Deserialize;
-use sqlx::{PgPool, Row};
+use sqlx::Row;
 use std::sync::Arc;
-use tracing::{error, info, warn};
+use tracing::error;
 
 use crate::model::AuthContext;
 use crate::state::AppState;
-use argon2::{
-    password_hash::{PasswordHash, PasswordVerifier},
-    Argon2,
-};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -111,10 +106,17 @@ pub async fn auth_middleware(
     // Lookup
     let row = sqlx::query(
         r#"
-        SELECT u.id as user_id, u.tier, u.balance, ak.scopes 
+        SELECT 
+            ak.user_id, 
+            us.tier_id, 
+            us.credits_remaining, 
+            ak.scopes, 
+            st.rate_limit_per_second as rate_limit,
+            st.ds_mode_enabled
         FROM api_keys ak
-        JOIN users u ON ak.user_id = u.id
-        WHERE ak.key_hash = $1
+        JOIN user_subscriptions us ON ak.user_id = us.user_id
+        JOIN subscription_tiers st ON us.tier_id = st.id
+        WHERE ak.key_hash = $1 AND ak.is_active = true
         "#,
     )
     .bind(&incoming_hash)
@@ -126,22 +128,17 @@ pub async fn auth_middleware(
     })?;
 
     if let Some(user_data) = row {
-        let tier_str: String = user_data.try_get("tier").unwrap_or_default();
-        let tier_id = match tier_str.as_str() {
-            "pro" => 2,
-            "institutional" => 3,
-            _ => 1,
-        };
-
         let auth_context = AuthContext {
             user_id: user_data.try_get("user_id").unwrap(),
-            tier_id,
+            tier_id: user_data.try_get("tier_id").unwrap(),
             scopes: user_data
                 .try_get::<Vec<String>, _>("scopes")
                 .unwrap_or_default(),
-            rate_limit: if tier_id == 2 { 500 } else { 10 },
-            credits_remaining: user_data.try_get("balance").unwrap_or(0),
-            ds_mode_enabled: tier_id > 1,
+            rate_limit: user_data.try_get::<i32, _>("rate_limit").unwrap_or(10),
+            credits_remaining: user_data
+                .try_get::<i32, _>("credits_remaining")
+                .unwrap_or(0),
+            ds_mode_enabled: user_data.try_get("ds_mode_enabled").unwrap_or(false),
         };
         request.extensions_mut().insert(auth_context);
         Ok(next.run(request).await)
@@ -151,7 +148,7 @@ pub async fn auth_middleware(
 }
 
 pub async fn rate_limit_middleware(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
     request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {

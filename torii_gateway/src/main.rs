@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     })?;
 
     // Allow connection to verify
-    let mut conn = redis_client
+    let _conn = redis_client
         .get_multiplexed_async_connection()
         .await
         .map_err(|e| {
