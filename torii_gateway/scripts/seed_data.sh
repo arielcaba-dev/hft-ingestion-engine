@@ -27,5 +27,9 @@ docker exec -i postgres psql -U arroyo -d arroyo -c "INSERT INTO api_keys (user_
 echo "Subscribing User to Pro Tier..."
 docker exec -i postgres psql -U arroyo -d arroyo -c "INSERT INTO user_subscriptions (user_id, tier_id, credits_remaining) VALUES ('$USER_ID', 2, 1000);"
 
+# Seed Redis with Credits (since billing checks Redis first)
+echo "Seeding Redis Credits..."
+docker exec -i redis redis-cli SET "credits:$USER_ID" 1000
+
 echo "Seeding Complete."
 echo "Use API Key: 'test_key_123' for testing."
