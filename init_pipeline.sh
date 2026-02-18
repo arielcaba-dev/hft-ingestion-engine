@@ -50,7 +50,7 @@ echo "✅ Data produced to Kafka."
 echo "🔄 Verifying Ingestion Engine (Live Binance Data)..."
 
 # Wait for ingestion engine to be healthy
-until docker inspect --format='{{.State.Health.Status}}' ingestion-engine | grep -q "healthy"; do
+until docker inspect --format='{{.State.Health.Status}}' torii-ingestion | grep -q "healthy"; do
   echo "  - Waiting for Ingestion Engine..."
   sleep 5
 done
