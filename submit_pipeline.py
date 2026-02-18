@@ -88,7 +88,7 @@ CREATE TABLE ohlcv_archive (
     path = 's3://archive/ohlcv/',
     format = 'json',
     type = 'sink',
-    'storage.endpoint' = 'http://minio:9000',
+    'storage.endpoint' = '{}',
     'storage.region' = 'us-east-1'
 );
 

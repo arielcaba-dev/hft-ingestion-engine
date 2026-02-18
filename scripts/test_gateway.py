@@ -6,9 +6,12 @@ import urllib.request
 import urllib.error
 import time
 
+import os
+
 API_KEY = "test_key_123"
-GATEWAY_URL = "http://localhost:8080"
-WS_URL = "ws://localhost:8080"
+GATEWAY_HOST = os.getenv("GATEWAY_HOST", "localhost:8080")
+GATEWAY_URL = f"http://{GATEWAY_HOST}"
+WS_URL = f"ws://{GATEWAY_HOST}"
 
 async def test_ws_subscription():
     uri = f"{WS_URL}/v1/ws?api_key={API_KEY}"

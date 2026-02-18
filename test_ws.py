@@ -1,9 +1,11 @@
 import asyncio
 import websockets
 import json
+import os
 
 async def test_websocket():
-    uri = "ws://localhost:8080/v1/ws/ds?api_key=test_key_123"
+    gateway_host = os.getenv("GATEWAY_HOST", "localhost:8080")
+    uri = f"ws://{gateway_host}/v1/ws/ds?api_key=test_key_123"
     async with websockets.connect(uri) as websocket:
         print(f"Connected to DS Mode: {uri}")
         

@@ -77,8 +77,8 @@ pub async fn historical_handler(
 
         // Let's assume we proceed with the Redirect 303.
         let presigned_url = format!(
-            "http://localhost:9000/historical-data/{}?signature=mock",
-            filename
+            "{}/historical-data/{}?signature=mock",
+            state.config.public_s3_endpoint, filename
         );
 
         // Return 303 See Other

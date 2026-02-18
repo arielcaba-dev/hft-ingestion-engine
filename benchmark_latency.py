@@ -12,8 +12,11 @@ import statistics
 import sys
 
 # Configuration
-DS_URI = "ws://localhost:8080/v1/ws/ds?api_key=test_key_123"
-STANDARD_URI = "ws://localhost:8080/v1/ws?api_key=test_key_123"
+import os
+
+GATEWAY_HOST = os.getenv("GATEWAY_HOST", "localhost:8080")
+DS_URI = f"ws://{GATEWAY_HOST}/v1/ws/ds?api_key=test_key_123"
+STANDARD_URI = f"ws://{GATEWAY_HOST}/v1/ws?api_key=test_key_123"
 SAMPLE_SIZE = 100  # Number of messages to sample for latency calculation
 
 async def benchmark_ds_mode():

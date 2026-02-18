@@ -9,6 +9,7 @@ pub struct GatewayConfig {
     pub redis_url: String,
     #[allow(dead_code)]
     pub s3_endpoint: String,
+    pub public_s3_endpoint: String,
     #[allow(dead_code)]
     pub s3_bucket: String,
     #[allow(dead_code)]
@@ -30,6 +31,7 @@ impl GatewayConfig {
         let s = Config::builder()
             // Start with default values
             .set_default("server_port", 8080)?
+            .set_default("public_s3_endpoint", "http://localhost:9090")?
             .set_default("jwt_secret", "secret")?
             // Load from environment variables
             .add_source(Environment::default())
