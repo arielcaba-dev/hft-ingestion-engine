@@ -270,6 +270,7 @@ services:
       S3_BUCKET: historical-data
       S3_ACCESS_KEY: ${MINIO_ROOT_USER}
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      PUBLIC_S3_ENDPOINT: ${PUBLIC_S3_ENDPOINT}
       QUESTDB_URL: http://questdb:9000
       QUESTDB_PG_URL: postgres://admin:quest@questdb:8812/qdb
       REDPANDA_BROKERS: redpanda:9092
