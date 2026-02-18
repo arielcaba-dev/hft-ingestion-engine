@@ -82,50 +82,80 @@ Located in `torii_ingestion/src/model.rs`.
 
 ## Deployment
 
-### Docker Compose (Recommended)
+### Prerequisites
+- Docker & Docker Compose
+- Python 3.9+ (for verification scripts)
 
-The complete stack is containerized and can be deployed with a single command:
+### Configuration
 
-```bash
-docker-compose up -d
-```
+1.  **Environment Variables**
+    Copy the sample environment file:
+    ```bash
+    cp .env.sample .env
+    ```
 
-This starts:
-- **Redpanda** (Kafka-compatible broker)
-- **QuestDB** (Time-series database)
-- **Postgres** (Metadata storage)
-- **Torii Ingestion** (Rust application)
-- **QuestDB Bridge** (Python Kafka → QuestDB writer)
-- **Arroyo** (Stream processing cluster)
-- **Grafana** (Visualization)
+    Edit `.env` and set the following:
+    -   `PUBLIC_HOST`:
+        -   **Local**: Input `localhost`.
+        -   **Remote**: Input your server's **Public IP** or **Domain Name**.
+    -   `DB_PASSWORD` / `MINIO_ROOT_PASSWORD`: Set strong passwords for production.
+
+### Quick Start (Local & Remote)
+
+The complete stack is containerized and can be deployed with a single command.
+
+1.  **Start Services**
+    ```bash
+    docker-compose up -d --build
+    ```
+
+    This starts:
+    -   **Redpanda** (Kafka-compatible broker)
+    -   **QuestDB** (Time-series database)
+    -   **Postgres** (Metadata storage)
+    -   **Torii Ingestion** (Rust application)
+    -   **Torii Gateway** (WebSocket API)
+    -   **QuestDB Bridge** (Python Kafka → QuestDB writer)
+    -   **Arroyo** (Stream processing cluster)
+    -   **Grafana** (Visualization)
+    -   **MinIO** (S3-compatible storage)
+
+2.  **Initialize Pipeline**
+    Once services are up (wait ~30s), run the initialization script to verify health, create topics, and check data flow:
+    ```bash
+    chmod +x init_pipeline.sh
+    ./init_pipeline.sh
+    ```
+    *This script checks service health, produces test data, and verifies that the ingestion engine is processing live Binance data.*
+
+### Remote Access
+
+If you are deploying on a remote server (e.g., VPS):
+
+1.  Ensure ports `8080` (Gateway), `19092` (Redpanda), and `3000` (Grafana) are open value in your firewall.
+2.  Update `PUBLIC_HOST` in `.env` to your server's IP.
+3.  **Verify Connectivity**:
+    Run the test script from your **local machine**:
+    ```bash
+    # Install dependencies
+    pip install websockets requests
+
+    # Run test targeting remote host
+    export GATEWAY_HOST="<YOUR_SERVER_IP>:8080"
+    python3 scripts/test_gateway.py
+    ```
 
 ### Service Ports
 
 | Service | Port | Purpose |
 |---------|------|---------|
-| Redpanda | 19092 | Kafka API |
+| Redpanda | 19092 | Kafka API (External) |
 | QuestDB | 9000 | HTTP/REST API |
 | QuestDB | 9009 | InfluxDB Line Protocol (ILP) |
 | Torii Gateway | 8080 | WebSocket API |
 | Grafana | 3000 | Dashboards |
 | Arroyo | 5115 | Arroyo UI/API |
-
-### Verification
-
-Check service health:
-```bash
-docker-compose ps
-```
-
-Submit a risk pipeline:
-```bash
-python3 submit_pipeline.py
-```
-
-Run integration tests:
-```bash
-python3 test_risk_pipeline.py
-```
+| MinIO | 9001 | S3 Console |
 
 ### Manual Build (Development)
 
