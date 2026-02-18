@@ -46,6 +46,17 @@ echo "$SAMPLE_JSON" | docker exec -i redpanda rpk topic produce market_data_raw
 
 echo "✅ Data produced to Kafka."
 
+
+# 2.5 Seed Data (User & API Key)
+echo "🌱 Seeding initial data..."
+if [ -f "./torii_gateway/scripts/seed_data.sh" ]; then
+    chmod +x ./torii_gateway/scripts/seed_data.sh
+    ./torii_gateway/scripts/seed_data.sh
+else
+    echo "⚠️  Seed script not found at ./torii_gateway/scripts/seed_data.sh"
+    # Fallback or just warn
+fi
+
 # 3. Verify Ingestion Engine (Live Data)
 echo "🔄 Verifying Ingestion Engine (Live Binance Data)..."
 
