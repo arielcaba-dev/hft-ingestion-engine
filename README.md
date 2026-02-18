@@ -278,6 +278,21 @@ The `torii-gateway` service provides real-time WebSocket endpoints for streaming
 **Standard Mode (JSON)**: `/v1/ws?api_key=<key>`
 - JSON-based WebSocket stream with dynamic symbol subscriptions.
 
+### Security & Billing Layer
+
+The Gateway is protected by a multi-layered security and billing system:
+
+- **Tier-Based Access Control**:
+    - **Free (Tier 1)**: Standard JSON WebSocket & REST API.
+    - **Pro (Tier 2)**: Higher rate limits and L3 data.
+    - **Enterprise (Tier 3)**: Required for **DS Mode (Protobuf)** high-frequency streams.
+- **Sliding Window Rate Limiting**: Redis-backed rate limiting with dynamic limits per tier and `X-RateLimit-*` headers.
+- **Credit-Based Billing**:
+    - Atomic credit deduction per request.
+    - Background synchronization from Redis to Postgres every 10 seconds.
+    - Automatic rejection (402 Payment Required) when credits are exhausted.
+- **API Key Management**: Secure hashing (SHA256) and scope-based authorization.
+
 
 ## Project Structure
 

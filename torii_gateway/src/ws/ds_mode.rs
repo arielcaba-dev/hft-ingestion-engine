@@ -1,13 +1,16 @@
+use crate::model::AuthContext;
 use crate::AppState;
 use axum::{
     extract::{
         ws::{Message, WebSocket},
         State, WebSocketUpgrade,
     },
+    http::StatusCode,
     response::IntoResponse,
+    Extension,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
-use prost::Message as ProstMessage; // Rename to avoid conflict with axum Message
+use prost::Message as ProstMessage;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{BaseConsumer, Consumer};
 use rdkafka::message::Message as RdMessage;
@@ -24,8 +27,12 @@ pub mod market_data {
 pub async fn ds_handler(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_ds_socket(socket, state))
+    Extension(auth_context): Extension<AuthContext>,
+) -> Result<impl IntoResponse, StatusCode> {
+    if !auth_context.ds_mode_enabled {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    Ok(ws.on_upgrade(move |socket| handle_ds_socket(socket, state)))
 }
 
 async fn handle_ds_socket(socket: WebSocket, state: Arc<AppState>) {

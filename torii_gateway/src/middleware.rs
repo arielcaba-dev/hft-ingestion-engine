@@ -42,11 +42,11 @@ pub async fn auth_middleware(
     if api_key == "bootstrap_key" {
         // Mock context for bootstrap
         let auth_context = AuthContext {
-            user_id: Uuid::new_v4(),
-            tier_id: 2, // Pro
+            user_id: Uuid::nil(), // Use Nil UUID for bootstrap super-user
+            tier_id: 3,           // Enterprise
             scopes: vec!["market:read".to_string(), "trade:execute".to_string()],
-            rate_limit: 500,
-            credits_remaining: 1000000,
+            rate_limit: 10000,
+            credits_remaining: 99999999,
             ds_mode_enabled: true,
         };
         request.extensions_mut().insert(auth_context);
@@ -147,16 +147,68 @@ pub async fn auth_middleware(
     }
 }
 
+use axum::Extension;
+
 pub async fn rate_limit_middleware(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
+    Extension(auth_context): Extension<AuthContext>,
     request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    // Extract user_id from extensions (set by auth middleware)
-    // let user_id = request.extensions().get::<&str>().unwrap();
+    let mut conn = state
+        .redis
+        .get_multiplexed_async_connection()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Redis Rate Limit Check
-    // ...
+    let user_id = auth_context.user_id;
 
-    Ok(next.run(request).await)
+    // Bypass for super-user (bootstrap)
+    if user_id.is_nil() {
+        return Ok(next.run(request).await);
+    }
+
+    let limit = auth_context.rate_limit as u64;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_micros() as f64;
+    let window_start = now - 1_000_000.0; // 1 second in microseconds
+
+    let key = format!("rate_limit:{}", user_id);
+
+    // 1. Sliding Window Logic
+    use redis::AsyncCommands;
+
+    // Remove old requests
+    let _: () = conn
+        .zrembyscore(&key, "-inf", window_start)
+        .await
+        .unwrap_or(());
+
+    // Count current requests
+    let current_count: u64 = conn.zcard(&key).await.unwrap_or(0);
+
+    if current_count >= limit {
+        return Err(StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    // 2. Billing logic (Simplified: 1 credit per request for now)
+    // We can make this more complex later if needed.
+    if let Err(status) = crate::billing::deduct_credits(&state, user_id, 1).await {
+        return Err(status);
+    }
+
+    // Add current request
+    let _: () = conn.zadd(&key, now, now).await.unwrap_or(());
+
+    // 3. Run next
+    let mut response = next.run(request).await;
+
+    // 4. Add Headers
+    let headers = response.headers_mut();
+    headers.insert("X-RateLimit-Limit", limit.into());
+    headers.insert("X-RateLimit-Remaining", (limit - current_count - 1).into());
+
+    Ok(response)
 }

@@ -34,7 +34,7 @@ async fn sync_credits(state: &AppState) -> Result<(), Box<dyn std::error::Error>
         // Alternatively, we could use decrement deltas if we wanted to support multi-region.
         let user_uuid = uuid::Uuid::parse_str(&user_id_str)?;
 
-        sqlx::query("UPDATE users SET balance = $1 WHERE id = $2")
+        sqlx::query("UPDATE user_subscriptions SET credits_remaining = $1 WHERE user_id = $2")
             .bind(balance)
             .bind(user_uuid)
             .execute(&state.pool)
@@ -67,5 +67,10 @@ pub async fn deduct_credits(
     }
 
     let _: i32 = conn.decr(&key, cost).await.unwrap_or(0);
+    // Add to active set for background sync
+    let _: () = conn
+        .sadd("active_billing_users", user_id.to_string())
+        .await
+        .unwrap_or(());
     Ok(())
 }
