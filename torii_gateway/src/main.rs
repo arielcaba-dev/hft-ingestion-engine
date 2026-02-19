@@ -2,6 +2,7 @@ mod billing;
 mod config;
 mod error;
 mod handlers;
+mod historical;
 mod middleware;
 mod model;
 mod state; // New state module
@@ -111,6 +112,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/v1/trades/historical",
             get(handlers::historical::historical_handler),
         )
+        .route("/v1/exchanges", get(handlers::metadata::get_exchanges))
+        .route("/v1/assets", get(handlers::metadata::get_assets))
+        .route("/v1/symbols", get(handlers::metadata::get_symbols))
         .route(
             "/v1/market/health",
             get(handlers::market::get_market_health),
@@ -118,6 +122,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route(
             "/v1/market/recent-trades",
             get(handlers::market::get_recent_trades),
+        )
+        .route(
+            "/v1/market/risk",
+            get(handlers::market::get_risk_metrics),
         )
         .route("/v1/keys", post(handlers::keys::create_api_key))
         .route("/v1/keys/:id", delete(handlers::keys::revoke_api_key))

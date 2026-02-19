@@ -90,8 +90,24 @@ pub async fn historical_handler(
             .await
             .map_err(|e| AppError::Internal(format!("QuestDB data error: {}", e)))?;
 
-        // B. Generate Parquet File
-        generate_parquet_file(&filepath, &rows)?;
+        // A.5 Fetch Metadata for Precision
+        // We use normalized_symbol to match params.symbol (assuming params.symbol is normalized like BTC-USD)
+        let symbol_meta: crate::handlers::metadata::Symbol = sqlx::query_as(
+            "SELECT id, exchange_id, base_asset_id, quote_asset_id, symbol, normalized_symbol, price_precision, size_precision, min_order_size FROM symbols WHERE normalized_symbol = $1"
+        )
+        .bind(&params.symbol)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|e| AppError::Internal(format!("Metadata query error: {}", e)))?
+        .ok_or(AppError::Internal(format!("Symbol {} not found in metadata", params.symbol)))?;
+
+        // B. Generate Parquet File with Precision Checks
+        crate::historical::parquet_writer::generate_parquet_file(
+            &filepath, 
+            &rows,
+            symbol_meta.price_precision,
+            symbol_meta.size_precision
+        )?;
 
         // C. Upload to S3/MinIO
         let body = aws_sdk_s3::primitives::ByteStream::from_path(&filepath)
@@ -138,10 +154,7 @@ pub async fn historical_handler(
 
         let results: Vec<serde_json::Value> = rows.into_iter().map(|row| {
             let ts_micros = row.get::<i64, _>("timestamp");
-            let dt = chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(
-                chrono::NaiveDateTime::from_timestamp_micros(ts_micros).unwrap_or_default(),
-                chrono::Utc
-            );
+            let dt = chrono::DateTime::from_timestamp_micros(ts_micros).unwrap_or_default();
             serde_json::json!({
                 "symbol": row.get::<String, _>("symbol"),
                 "price": row.get::<f64, _>("price"),
@@ -152,47 +165,4 @@ pub async fn historical_handler(
 
         Ok(Json(results).into_response())
     }
-}
-
-fn generate_parquet_file(path: &str, rows: &[sqlx::postgres::PgRow]) -> Result<(), AppError> {
-    let schema = Arc::new(Schema::new(vec![
-        Field::new("symbol", DataType::Utf8, false),
-        Field::new("price", DataType::Float64, false),
-        Field::new("quantity", DataType::Float64, false),
-        Field::new("timestamp", DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())), false),
-    ]));
-
-    let mut symbols = Vec::new();
-    let mut prices = Vec::new();
-    let mut quantities = Vec::new();
-    let mut timestamps = Vec::new();
-
-    for row in rows {
-        symbols.push(row.get::<String, _>("symbol"));
-        prices.push(row.get::<f64, _>("price"));
-        quantities.push(row.get::<f64, _>("quantity"));
-        
-        let ts_micros = row.get::<i64, _>("timestamp");
-        timestamps.push(ts_micros);
-    }
-
-    let batch = RecordBatch::try_new(
-        schema.clone(),
-        vec![
-            Arc::new(StringArray::from(symbols)),
-            Arc::new(Float64Array::from(prices)),
-            Arc::new(Float64Array::from(quantities)),
-            Arc::new(TimestampMicrosecondArray::from_vec(timestamps, Some("UTC".into()))),
-        ],
-    ).map_err(|e| AppError::Internal(format!("Arrow batch error: {}", e)))?;
-
-    let file = File::create(path).map_err(|e| AppError::Internal(e.to_string()))?;
-    let props = WriterProperties::builder().build();
-    let mut writer = ArrowWriter::try_new(file, schema, Some(props))
-        .map_err(|e| AppError::Internal(format!("Parquet writer error: {}", e)))?;
-
-    writer.write(&batch).map_err(|e| AppError::Internal(format!("Parquet write error: {}", e)))?;
-    writer.close().map_err(|e| AppError::Internal(format!("Parquet close error: {}", e)))?;
-
-    Ok(())
 }

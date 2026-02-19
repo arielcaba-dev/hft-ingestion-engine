@@ -69,30 +69,40 @@ async fn handle_ds_socket(socket: WebSocket, state: Arc<AppState>) {
                     if let Some(payload) = m.payload() {
                         if let Ok(json_val) = serde_json::from_slice::<serde_json::Value>(payload) {
                             // Extract fields safely
+                            // Extract fields from NormalizedMarketData
                             let symbol_raw = json_val
-                                .get("s")
+                                .get("symbol_id")
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("UNKNOWN");
-                            let price_str =
-                                json_val.get("p").and_then(|v| v.as_str()).unwrap_or("0.0");
-                            let qty_str =
-                                json_val.get("q").and_then(|v| v.as_str()).unwrap_or("0.0");
+                            
+                            let price = json_val.get("price").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                            let quantity = json_val.get("quantity").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                            
+                            // Legacy raw sequence/ts checks matching old logic if present, or defaults
                             let ts = json_val.get("E").and_then(|v| v.as_i64()).unwrap_or(0);
+                            
+                            let time_exchange_str = json_val.get("time_exchange").and_then(|v| v.as_str()).unwrap_or("");
+                            let time_ingest_str = json_val.get("time_ingest").and_then(|v| v.as_str()).unwrap_or("");
+                            
+                            let time_exchange = chrono::DateTime::parse_from_rfc3339(time_exchange_str)
+                                .map(|dt| dt.timestamp_micros())
+                                .unwrap_or(0);
+                            let time_ingest = chrono::DateTime::parse_from_rfc3339(time_ingest_str)
+                                .map(|dt| dt.timestamp_micros())
+                                .unwrap_or(0);
 
-                            // Map Symbol
-                            let symbol = match symbol_raw {
-                                "BTCUSDT" => "BTC-USD",
-                                "ETHUSDT" => "ETH-USD",
-                                _ => symbol_raw,
-                            };
+                            // Map Symbol (if needed, but normalized uses standardized IDs already)
+                            let symbol = symbol_raw; 
 
                             let packet = market_data::MarketDataPacket {
                                 symbol: symbol.to_string(),
-                                price: price_str.parse().unwrap_or(0.0),
-                                quantity: qty_str.parse().unwrap_or(0.0),
+                                price: price,
+                                quantity: quantity,
                                 timestamp: ts,
                                 is_snapshot: false,
                                 sequence_id: 0,
+                                time_exchange: time_exchange,
+                                time_ingest: time_ingest,
                             };
 
                             let mut buf = Vec::new();

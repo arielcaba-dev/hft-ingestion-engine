@@ -78,6 +78,25 @@ def consume_trades():
         finally:
             c.close()
 
+# State for IL Calculation (Symbol -> List of closes)
+# Simple in-memory state. In prod, use Redis or DB.
+symbol_state = {}
+
+def update_il_state(symbol, close_price):
+    if symbol not in symbol_state:
+        symbol_state[symbol] = []
+    
+    history = symbol_state[symbol]
+    history.append(close_price)
+    
+    # Keep last 60 minutes (1 hour)
+    if len(history) > 60:
+        history.pop(0)
+        
+    # Calculate Entry Price (Avg of window)
+    entry_price = sum(history) / len(history)
+    return entry_price
+
 def consume_ohlcv():
     """Consumer for OHLCV candles -> ohlcv_1m table"""
     c = Consumer({
@@ -109,25 +128,46 @@ def consume_ohlcv():
                     
                     # Parse window_end timestamp
                     ts_nanos = parse_iso8601_to_nanos(data.get('window_end'))
+                    symbol = data.get('symbol_id', 'UNKNOWN')
+                    close_price = float(data.get('close', 0.0))
                     
                     sender.row(
                         'ohlcv_1m',
                         symbols={
-                            'symbol': data.get('symbol_id', 'UNKNOWN')
+                            'symbol': symbol
                         },
                         columns={
                             'open': float(data.get('open', 0.0)),
                             'high': float(data.get('high', 0.0)),
                             'low': float(data.get('low', 0.0)),
-                            'close': float(data.get('close', 0.0)),
+                            'close': close_price,
                             'volume': float(data.get('volume', 0.0))
                         },
                         at=ts_nanos
                     )
                     
+                    # 2. Calculate IL
+                    entry_price = update_il_state(symbol, close_price)
+                    if entry_price > 0:
+                        ratio = close_price / entry_price
+                        # IL Formula: 2 * sqrt(ratio) / (1 + ratio) - 1
+                        il_score = (2 * (ratio ** 0.5) / (1 + ratio)) - 1
+                        
+                        # 3. Ingest IL Risk
+                        sender.row(
+                            'defi_risk',
+                            symbols={'symbol': symbol},
+                            columns={
+                                'il_score': il_score,
+                                'entry_price': entry_price,
+                                'current_price': close_price
+                            },
+                            at=ts_nanos
+                        )
+                    
                     msg_count += 1
                     if msg_count % 100 == 0:
-                        print(f"✅ OHLCV: Processed {msg_count} candles")
+                        print(f"✅ OHLCV & Risk: Processed {msg_count} records")
                         sender.flush()
 
                 except Exception as e:
@@ -195,6 +235,7 @@ def consume_metrics():
         finally:
             c.close()
 
+
 def run():
     """Start all consumer threads"""
     print("=" * 60)
@@ -208,6 +249,7 @@ def run():
     # Start metrics consumer in separate thread
     metrics_thread = threading.Thread(target=consume_metrics, daemon=True)
     metrics_thread.start()
+
     
     # Start OHLCV consumer in main thread (blocks)
     consume_ohlcv()

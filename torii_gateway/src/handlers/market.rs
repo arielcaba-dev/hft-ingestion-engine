@@ -90,3 +90,59 @@ pub async fn get_recent_trades(
 
     Ok(Json(trades))
 }
+
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct RiskMetrics {
+    pub symbol: String,
+    pub volatility: f64,
+    pub liquidity: f64,
+    pub rsi: f64,
+    pub cvar_95: f64,
+    pub il_score: f64,
+    pub entry_price: f64,
+    pub current_price: f64,
+}
+
+pub async fn get_risk_metrics(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<RiskMetrics>, AppError> {
+    let symbol = params.get("symbol").cloned().unwrap_or_else(|| "BTC-USD".to_string());
+
+    // 1. Fetch Arroyo Metrics
+    let arroyo_row = sqlx::query(
+        "SELECT volatility, liquidity, rsi, cvar_95 FROM market_risk WHERE symbol = $1 ORDER BY timestamp DESC LIMIT 1"
+    )
+    .bind(&symbol)
+    .fetch_optional(&state.questdb)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to fetch Arroyo metrics: {}", e);
+        AppError::Database(e)
+    })?;
+
+    // 2. Fetch DeFi Metrics (Bridge)
+    let defi_row = sqlx::query(
+        "SELECT il_score, entry_price, current_price FROM defi_risk WHERE symbol = $1 ORDER BY timestamp DESC LIMIT 1"
+    )
+    .bind(&symbol)
+    .fetch_optional(&state.questdb)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to fetch DeFi metrics: {}", e);
+        AppError::Database(e)
+    })?;
+
+    let metrics = RiskMetrics {
+        symbol,
+        volatility: arroyo_row.as_ref().and_then(|r| r.try_get("volatility").ok()).unwrap_or(0.0),
+        liquidity: arroyo_row.as_ref().and_then(|r| r.try_get("liquidity").ok()).unwrap_or(0.0),
+        rsi: arroyo_row.as_ref().and_then(|r| r.try_get("rsi").ok()).unwrap_or(0.0),
+        cvar_95: arroyo_row.as_ref().and_then(|r| r.try_get("cvar_95").ok()).unwrap_or(0.0),
+        il_score: defi_row.as_ref().and_then(|r| r.try_get("il_score").ok()).unwrap_or(0.0),
+        entry_price: defi_row.as_ref().and_then(|r| r.try_get("entry_price").ok()).unwrap_or(0.0),
+        current_price: defi_row.as_ref().and_then(|r| r.try_get("current_price").ok()).unwrap_or(0.0),
+    };
+
+    Ok(Json(metrics))
+}

@@ -21,7 +21,7 @@ Binance WebSocket → Torii Ingestion → Redpanda → Torii Gateway → WebSock
                                           ↓
                                     Arroyo Engine → Redpanda (metrics_derived)
                                           ↓               ↓
-                                      QuestDB ←─── QuestDB Bridge
+                                      QuestDB ←─── QuestDB Bridge (DeFi Risk Calc)
                                    (Time-Series DB)       ↑
                                           ↓          (Multi-Topic)
                                        Grafana
@@ -34,7 +34,7 @@ Binance WebSocket → Torii Ingestion → Redpanda → Torii Gateway → WebSock
 3. **Ring Buffer**: A custom **Lock-Free SPSC Ring Buffer** that acts as the "Disruptor" to buffer data between the Ingestion/Normalization context and the Publish context without locking.
 4. **Producers**: Async tasks that publish normalized binary data to Redpanda.
 5. **Arroyo Risk Engine**: SQL-based stream processing pipeline that calculates real-time indicators (RSI, Volatility) and **CVaR** using custom Rust UDFs.
-6. **QuestDB Bridge**: Multi-threaded Python service that consumes from multiple topics (`market_data_raw`, `ohlcv_1m`, `metrics_derived`) and writes to QuestDB via ILP.
+6. **QuestDB Bridge**: Multi-threaded Python service that consumes from multiple topics. Crucially, it calculates **Impermanent Loss (IL)** in real-time by tracking a 60-minute rolling average price per symbol.
 7. **QuestDB**: Time-series database for persistent storage and analytics.
 8. **Grafana**: Provisioned dashboards for real-time visualization of market health and risk metrics.
 
@@ -243,10 +243,16 @@ CREATE TABLE market_risk (
 
 QuestDB `trades` table:
 ```sql
-CREATE TABLE trades (
+) TIMESTAMP(timestamp) PARTITION BY DAY;
+```
+
+QuestDB `defi_risk` table:
+```sql
+CREATE TABLE defi_risk (
     symbol SYMBOL,
-    price DOUBLE,
-    quantity DOUBLE,
+    il_score DOUBLE,
+    entry_price DOUBLE,
+    current_price DOUBLE,
     timestamp TIMESTAMP
 ) TIMESTAMP(timestamp) PARTITION BY DAY;
 ```

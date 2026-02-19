@@ -21,7 +21,10 @@ Learn how to monitor, debug, and inspect the data pipeline.
   ```
 - **Latest Risk Metrics**:
   ```sql
+  -- Arroyo Metrics
   SELECT * FROM market_risk ORDER BY timestamp DESC LIMIT 10;
+  -- DeFi Risk (Impermanent Loss)
+  SELECT * FROM defi_risk ORDER BY timestamp DESC LIMIT 10;
   ```
 - **Check Ingestion Lag**:
   ```sql

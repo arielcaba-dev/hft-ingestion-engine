@@ -6,6 +6,7 @@ use axum::{extract::State, response::IntoResponse, Json};
 use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
+use sqlx::Row;
 
 #[derive(Deserialize)]
 pub struct McpQuery {
@@ -53,82 +54,51 @@ pub async fn mcp_handler(
         return Err(AppError::Internal("Invalid symbol format".into()));
     }
 
-    let _sql_query = if query_lower.contains("rsi") {
-        format!(
-            "SELECT timestamp, rsi_14, close FROM indicators_1h WHERE symbol = '{}' ORDER BY timestamp DESC LIMIT 10",
-            symbol_context
-        )
-    } else if query_lower.contains("vwap") {
-        format!(
-            "SELECT timestamp, vwap, close FROM indicators_1h WHERE symbol = '{}' ORDER BY timestamp DESC LIMIT 10",
-            symbol_context
-        )
-    } else if query_lower.contains("macd") {
-        format!(
-             "SELECT timestamp, macd, signal, histogram FROM indicators_1h WHERE symbol = '{}' ORDER BY timestamp DESC LIMIT 10",
-             symbol_context
-        )
-    } else if query_lower.contains("bollinger") {
-        format!(
-             "SELECT timestamp, bb_upper, bb_lower, close FROM indicators_1h WHERE symbol = '{}' ORDER BY timestamp DESC LIMIT 10",
-             symbol_context
-        )
-    } else if query_lower.contains("risk") || query_lower.contains("cvar") {
-        format!(
-             "SELECT timestamp, cvar_score, volatility_atr FROM risk_metrics WHERE symbol = '{}' ORDER BY timestamp DESC LIMIT 1",
-             symbol_context
+    let (sql_query, query_type) = if query_lower.contains("risk") || query_lower.contains("volatility") {
+        (
+            format!(
+                "SELECT CAST(timestamp AS BIGINT) as timestamp, symbol, price, quantity FROM trades WHERE symbol = '{}' ORDER BY timestamp DESC LIMIT 100",
+                symbol_context
+            ),
+            "trades"
         )
     } else {
-        // Fallback or LLM decides to ask generic price
-        format!(
-            "SELECT timestamp, price FROM trades WHERE symbol = '{}' ORDER BY timestamp DESC LIMIT 10",
-            symbol_context
+         (
+            format!(
+                "SELECT CAST(timestamp AS BIGINT) as timestamp, symbol, price, quantity FROM trades WHERE symbol = '{}' ORDER BY timestamp DESC LIMIT 20",
+                symbol_context
+            ),
+            "trades"
         )
     };
 
-    // Execute logic
-    // We use sqlx::query (unprepared) because table names might vary or dynamic SQL.
-    // QuestDB handles PG wire protocol but sometimes prepared statements have edge cases.
-    // Safest is simple query if inputs are sanitized (we validated symbol).
+    // Execute query
+    let rows = sqlx::query(&sql_query)
+        .fetch_all(&state.questdb)
+        .await
+        .map_err(|e| AppError::Internal(format!("QuestDB query error: {}", e)))?;
 
-    // Note: sqlx::Row to JSON mapping
-    // We need a generic way to map rows to JSON.
-    // For now, we can structure the response based on the query type or use a helper.
-
-    // Since we don't know the schema at compile time comfortably for all queries without complex enums,
-    // let's try to fetch as generic JSON if sqlx supports it, or define a struct for the common indicators.
-
-    // Let's assume `indicators_1h` exists and has these columns.
-
-    // Simplification: We just execute and map manually for a few know columns
-    // Or return a "Not Implemented" if tables don't exist yet.
-
-    // For this demonstration, we'll simulate the response if the DB is empty (likely),
-    // but the code should try to query.
-
-    // Note: 'indicators_1h' table is populated by Arroyo. If it doesn't exist, this will fail.
-    // We should treat DB errors gracefully.
-
-    // Using sqlx::query to fetch as generic values
-    // But generic row mapping in SQLx is verbose.
-    // Let's mock the data for the purpose of the Gateway "Interface" deliverables,
-    // OR try to map to a struct if we are sure of the schema.
-
-    // Let's assume standard interaction for now.
-
-    // Simplified Mock Response to fix compilation (E0282)
-    // TODO: Implement dynamic row mapping with sqlx::Column/Row traits
-    let response_data = json!({
-        "status": "success",
-        "mock_data": [
-            {"timestamp": "2026-02-14T08:00:00Z", "rsi": 58.3, "vwap": 67234.12, "macd": 120.5, "cvar": 0.05}
-        ]
-    });
+    // Map rows to JSON based on query type
+    let data = if query_type == "trades" {
+         rows.into_iter().map(|row| {
+             let ts: i64 = row.get("timestamp");
+             let dt = chrono::DateTime::from_timestamp_micros(ts).unwrap_or_default();
+             json!({
+                 "timestamp": dt.to_rfc3339(),
+                 "symbol": row.get::<String, _>("symbol"),
+                 "price": row.get::<f64, _>("price"),
+                 "quantity": row.get::<f64, _>("quantity")
+             })
+         }).collect::<Vec<_>>()
+    } else {
+        vec![]
+    };
 
     let response = json!({
-        "summary": format!("Query for {} ({}) executed. Cost: {} credits.", symbol_context, query_lower, cost),
-        "data": response_data,
-        "tokens_saved": 1500
+        "summary": format!("Executed query: {}", sql_query),
+        "data": data,
+        "count": data.len(),
+        "credits_used": cost
     });
 
     Ok(Json(response))

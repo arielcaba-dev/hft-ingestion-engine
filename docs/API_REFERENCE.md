@@ -53,7 +53,22 @@ Returns historical trade data.
 
 ### 3. Risk Metrics
 `GET /v1/market/risk?symbol={symbol}`
-Fetch real-time risk calculations (CVaR 95%, RSI, Volatility).
+
+Fetch unified real-time risk calculations combining Arroyo metrics and DeFi indicators.
+
+**Response (200 OK)**:
+```json
+{
+  "symbol": "BTC-USD",
+  "volatility": 0.0012,
+  "liquidity": 450000.0,
+  "rsi": 55.4,
+  "cvar_95": -0.024,
+  "il_score": -0.000027,
+  "entry_price": 67288.39,
+  "current_price": 67320.0
+}
+```
 
 ---
 
