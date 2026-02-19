@@ -128,6 +128,10 @@ The complete stack is containerized and can be deployed with a single command.
     ```
     *This script checks service health, produces test data, and verifies that the ingestion engine is processing live Binance data.*
 
+3.  **Explore Documentation**
+    - [API Reference](docs/API_REFERENCE.md): REST & WebSocket endpoint details.
+    - [Observability Guide](docs/OBSERVABILITY.md): Grafana, QuestDB, and Arroyo monitoring.
+
 ### Remote Access
 
 If you are deploying on a remote server (e.g., VPS):
@@ -220,8 +224,8 @@ A high-performance Python service (`bridge.py`) acts as the ingestion backbone f
 - **Protocol**: TCP ILP (port 9009)
 
 **Files**:
-- [`bridge.py`](bridge.py) - Kafka consumer and QuestDB writer
-- [`Dockerfile.bridge`](Dockerfile.bridge) - Container image
+- [`scripts/bridge.py`](scripts/bridge.py) - Kafka consumer and QuestDB writer
+- [`Dockerfile.bridge`](Dockerfile.bridge) - Container image (references `scripts/bridge.py`)
 
 ### Data Schema
 
@@ -297,13 +301,16 @@ The Gateway is protected by a multi-layered security and billing system:
 ## Project Structure
 
 ```
-.
 ├── torii_ingestion/            # Ingestion Engine (Rust)
 ├── torii_gateway/              # API Gateway (Rust)
-├── bridge.py                   # Multi-topic QuestDB bridge
+├── scripts/                    # Utilities, bridges, and tests
+│   ├── bridge.py               # Multi-topic QuestDB bridge
+│   ├── submit_pipeline.py      # Arroyo submission script
+│   └── test_historical.py      # Historical data integration test
 ├── arroyo/                     # Arroyo SQL pipelines & UDFs
 │   ├── risk_pipeline.sql       # Production risk pipeline
 │   └── udf_indicators.rs       # Rust UDF implementations
+├── docs/                       # Project Documentation
 ├── docker-compose.yaml         # Full-stack orchestration
 └── README.md
 ```
