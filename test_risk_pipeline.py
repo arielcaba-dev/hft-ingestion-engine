@@ -105,7 +105,7 @@ def check_kafka_ohlcv():
         'auto.offset.reset': 'earliest'
     })
     
-    c.subscribe(['debug_output'])
+    c.subscribe(['metrics_derived'])
     
     start_time = time.time()
     msg_count = 0

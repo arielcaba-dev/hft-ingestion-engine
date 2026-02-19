@@ -92,12 +92,40 @@ CREATE TABLE ohlcv_archive (
     'storage.region' = 'us-east-1'
 );
 
+-- 6. SINK: Redpanda (ohlcv_1m)
+CREATE TABLE ohlcv_sink (
+    symbol_id STRING,
+    window_end TIMESTAMP,
+    open DOUBLE,
+    high DOUBLE,
+    low DOUBLE,
+    close DOUBLE,
+    volume DOUBLE
+) WITH (
+    connector = 'kafka',
+    topic = 'ohlcv_1m',
+    bootstrap_servers = 'redpanda:9092',
+    format = 'json',
+    type = 'sink'
+);
+
 INSERT INTO metrics_sink
 SELECT
     symbol_id,
     window_end,
     cvar_95
 FROM risk_metrics;
+
+INSERT INTO ohlcv_sink
+SELECT
+    symbol_id,
+    window_end,
+    open,
+    high,
+    low,
+    close,
+    volume
+FROM ohlcv_1m;
 
 INSERT INTO ohlcv_archive
 SELECT
