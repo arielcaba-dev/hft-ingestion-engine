@@ -65,11 +65,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })?;
     info!("Redis connected successfully");
 
+    // Initialize S3 Client
+    info!("Initializing S3 client for {}", config.s3_endpoint);
+    let s3_config_loader = aws_config::defaults(aws_config::BehaviorVersion::latest())
+        .endpoint_url(config.s3_endpoint.clone())
+        .credentials_provider(aws_sdk_s3::config::Credentials::new(
+            &config.s3_access_key,
+            &config.s3_secret_key,
+            None,
+            None,
+            "static",
+        ))
+        .region(aws_sdk_s3::config::Region::new("us-east-1"))
+        .load()
+        .await;
+
+    let s3_config = aws_sdk_s3::config::Builder::from(&s3_config_loader)
+        .force_path_style(true)
+        .build();
+
+    let s3_client = aws_sdk_s3::Client::from_conf(s3_config);
+
     let state = Arc::new(AppState {
         config: config.clone(),
         pool: pool,
         questdb: questdb_pool,
         redis: redis_client,
+        s3_client: s3_client,
     });
 
     // Start Billing Task

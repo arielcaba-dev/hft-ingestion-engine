@@ -9,6 +9,6 @@ RUN apt-get update && \
 RUN pip install --no-cache-dir confluent-kafka questdb questdb
 
 WORKDIR /app
-COPY bridge.py .
+COPY scripts/bridge.py .
 
 CMD ["python", "-u", "bridge.py"]

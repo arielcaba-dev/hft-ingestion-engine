@@ -53,6 +53,11 @@ pub async fn deduct_credits(
     user_id: uuid::Uuid,
     cost: i32,
 ) -> Result<(), StatusCode> {
+    // Bypass for super-user (bootstrap)
+    if user_id.is_nil() {
+        return Ok(());
+    }
+
     let mut conn = state
         .redis
         .get_multiplexed_async_connection()

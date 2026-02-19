@@ -4,7 +4,9 @@ import os
 ARROYO_URL = os.getenv('ARROYO_URL', "http://localhost:5115")
 
 try:
-    with open("arroyo/pipeline_questdb.sql", "r") as f:
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    sql_path = os.path.join(script_dir, "..", "arroyo/pipeline_questdb.sql")
+    with open(sql_path, "r") as f:
         sql = f.read()
     
     payload = {

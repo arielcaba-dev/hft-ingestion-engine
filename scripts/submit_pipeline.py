@@ -14,10 +14,12 @@ ARROYO_URL = os.getenv('ARROYO_URL', "http://localhost:5115")
 
 # Read SQL
 try:
-    with open("arroyo/risk_pipeline.sql", "r") as f:
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    sql_path = os.path.join(script_dir, "..", "arroyo/risk_pipeline.sql")
+    with open(sql_path, "r") as f:
         sql_content = f.read()
 except FileNotFoundError:
-    print("SQL file not found")
+    print(f"SQL file not found at {sql_path}")
     sys.exit(1)
 
 # Standardize SQL
