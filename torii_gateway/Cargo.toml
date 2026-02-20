@@ -40,6 +40,9 @@ argon2 = "0.5.3"
 metrics = "0.21"
 metrics-exporter-prometheus = "0.12"
 
+# Financial Information eXchange (FIX)
+fefix = "0.7"
+
 [build-dependencies]
 prost-build = "0.12"
 

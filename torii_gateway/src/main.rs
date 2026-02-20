@@ -1,6 +1,7 @@
 mod billing;
 mod config;
 mod error;
+mod fix;
 mod handlers;
 mod historical;
 mod middleware;

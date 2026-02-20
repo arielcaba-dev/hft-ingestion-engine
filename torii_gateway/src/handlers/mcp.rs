@@ -54,52 +54,113 @@ pub async fn mcp_handler(
         return Err(AppError::Internal("Invalid symbol format".into()));
     }
 
-    let (sql_query, query_type) = if query_lower.contains("risk") || query_lower.contains("volatility") {
-        (
-            format!(
-                "SELECT CAST(timestamp AS BIGINT) as timestamp, symbol, price, quantity FROM trades WHERE symbol = '{}' ORDER BY timestamp DESC LIMIT 100",
-                symbol_context
-            ),
-            "trades"
-        )
-    } else {
-         (
-            format!(
-                "SELECT CAST(timestamp AS BIGINT) as timestamp, symbol, price, quantity FROM trades WHERE symbol = '{}' ORDER BY timestamp DESC LIMIT 20",
-                symbol_context
-            ),
-            "trades"
-        )
-    };
+    let response = if query_lower.contains("correlat") || query_lower.contains("impact") || (query_lower.contains("risk") && query_lower.contains("sentiment")) {
+        // --- Correlation Logic ---
+        let trades_query = format!(
+            "SELECT CAST(timestamp AS BIGINT) as timestamp, symbol, price FROM trades WHERE symbol = '{}' ORDER BY timestamp DESC LIMIT 50",
+            symbol_context
+        );
+        let sentiment_query = format!(
+            "SELECT CAST(timestamp AS BIGINT) as timestamp, symbol, sentiment_score, impact_score FROM sentiment WHERE symbol = '{}' ORDER BY timestamp DESC LIMIT 50",
+            symbol_context
+        );
 
-    // Execute query
-    let rows = sqlx::query(&sql_query)
-        .fetch_all(&state.questdb)
-        .await
-        .map_err(|e| AppError::Internal(format!("QuestDB query error: {}", e)))?;
+        let trades = sqlx::query(&trades_query).fetch_all(&state.questdb).await.map_err(|e| AppError::Internal(e.to_string()))?;
+        let sentiment = sqlx::query(&sentiment_query).fetch_all(&state.questdb).await.map_err(|e| AppError::Internal(e.to_string()))?;
 
-    // Map rows to JSON based on query type
-    let data = if query_type == "trades" {
-         rows.into_iter().map(|row| {
+        let trades_data = trades.into_iter().map(|row| {
              let ts: i64 = row.get("timestamp");
              let dt = chrono::DateTime::from_timestamp_micros(ts).unwrap_or_default();
              json!({
                  "timestamp": dt.to_rfc3339(),
-                 "symbol": row.get::<String, _>("symbol"),
-                 "price": row.get::<f64, _>("price"),
-                 "quantity": row.get::<f64, _>("quantity")
+                 "price": row.get::<f64, _>("price")
              })
-         }).collect::<Vec<_>>()
-    } else {
-        vec![]
-    };
+         }).collect::<Vec<_>>();
 
-    let response = json!({
-        "summary": format!("Executed query: {}", sql_query),
-        "data": data,
-        "count": data.len(),
-        "credits_used": cost
-    });
+        let sentiment_data = sentiment.into_iter().map(|row| {
+             let ts: i64 = row.get("timestamp");
+             let dt = chrono::DateTime::from_timestamp_micros(ts).unwrap_or_default();
+             json!({
+                 "timestamp": dt.to_rfc3339(),
+                 "score": row.get::<f64, _>("sentiment_score"),
+                 "impact": row.get::<f64, _>("impact_score")
+             })
+         }).collect::<Vec<_>>();
+
+        json!({
+            "type": "correlation",
+            "symbol": symbol_context,
+            "market_data": trades_data,
+            "sentiment_data": sentiment_data,
+            "analysis": "Align timestamps to visualize impact of sentiment spikes on price volatility.",
+            "credits_used": cost
+        })
+    } else {
+        // --- Standard Logic ---
+        let (sql_query, query_type) = if query_lower.contains("risk") || query_lower.contains("volatility") {
+            (
+                format!(
+                    "SELECT CAST(timestamp AS BIGINT) as timestamp, symbol, price, quantity FROM trades WHERE symbol = '{}' ORDER BY timestamp DESC LIMIT 100",
+                    symbol_context
+                ),
+                "trades"
+            )
+        } else if query_lower.contains("sentiment") || query_lower.contains("news") || query_lower.contains("social") {
+            (
+                format!(
+                    "SELECT CAST(timestamp AS BIGINT) as timestamp, symbol, source, sentiment_score, impact_score FROM sentiment WHERE symbol = '{}' ORDER BY timestamp DESC LIMIT 50",
+                    symbol_context
+                ),
+                "sentiment"
+            )
+        } else {
+            // Default to Trades/Risk
+             (
+                format!(
+                    "SELECT CAST(timestamp AS BIGINT) as timestamp, symbol, price, quantity FROM trades WHERE symbol = '{}' ORDER BY timestamp DESC LIMIT 20",
+                    symbol_context
+                ),
+                "trades"
+            )
+        };
+
+        let rows = sqlx::query(&sql_query)
+            .fetch_all(&state.questdb)
+            .await
+            .map_err(|e| AppError::Internal(format!("QuestDB query error: {}", e)))?;
+
+        let data = if query_type == "sentiment" {
+            rows.into_iter().map(|row| {
+                 let ts: i64 = row.get("timestamp");
+                 let dt = chrono::DateTime::from_timestamp_micros(ts).unwrap_or_default();
+                 json!({
+                     "timestamp": dt.to_rfc3339(),
+                     "symbol": row.get::<String, _>("symbol"),
+                     "source": row.get::<String, _>("source"),
+                     "sentiment_score": row.get::<f64, _>("sentiment_score"),
+                     "impact_score": row.get::<f64, _>("impact_score")
+                 })
+             }).collect::<Vec<_>>()
+        } else {
+             rows.into_iter().map(|row| {
+                 let ts: i64 = row.get("timestamp");
+                 let dt = chrono::DateTime::from_timestamp_micros(ts).unwrap_or_default();
+                 json!({
+                     "timestamp": dt.to_rfc3339(),
+                     "symbol": row.get::<String, _>("symbol"),
+                     "price": row.get::<f64, _>("price"),
+                     "quantity": row.get::<f64, _>("quantity")
+                 })
+             }).collect::<Vec<_>>()
+        };
+
+        json!({
+            "summary": format!("Executed query: {}", sql_query),
+            "data": data,
+            "count": data.len(),
+            "credits_used": cost
+        })
+    };
 
     Ok(Json(response))
 }
