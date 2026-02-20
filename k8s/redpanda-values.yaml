@@ -1,0 +1,42 @@
+# Redpanda Production Values (HA)
+statefulset:
+  replicas: 3
+  budget:
+    maxUnavailable: 1
+
+resources:
+  requests:
+    cpu: 2
+    memory: 4Gi
+  limits:
+    cpu: 4
+    memory: 8Gi
+
+storage:
+  persistentVolume:
+    enabled: true
+    size: 100Gi
+    storageClass: "gp3"
+
+auth:
+  sasl:
+    enabled: true
+    users:
+      - name: superuser
+        password: "superuser_password" # In prod, use secretRef
+      - name: torii
+        password: "torii_password"
+
+tieredStorage:
+  enabled: true
+  cloud_storage_enabled: true
+  cloud_storage_api_endpoint: "minio-service:9000"
+  cloud_storage_bucket: "redpanda-shadow-logs"
+  cloud_storage_region: "us-east-1"
+  cloud_storage_access_key: "minioadmin"
+  cloud_storage_secret_key: "minioadmin"
+
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: true

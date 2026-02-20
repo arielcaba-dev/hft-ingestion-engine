@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: torii-ingestion
+  namespace: torii-production
+  labels:
+    app: torii-ingestion
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: torii-ingestion
+  template:
+    metadata:
+      labels:
+        app: torii-ingestion
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9003"
+    spec:
+      containers:
+      - name: ingestion
+        image: torii-ingestion:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 9003
+          name: metrics
+        env:
+        - name: KAFKA_BROKERS
+          value: "redpanda-0.redpanda.torii-production.svc.cluster.local:9092"
+        resources:
+          requests:
+            cpu: "1000m"
+            memory: "1Gi"
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: torii-ingestion
+  namespace: torii-production
+spec:
+  type: ClusterIP
+  selector:
+    app: torii-ingestion
+  ports:
+    - name: metrics
+      port: 9003
+      targetPort: 9003
