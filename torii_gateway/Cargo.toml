@@ -36,6 +36,10 @@ parquet = "50.0"
 arrow = "50.0"
 argon2 = "0.5.3"
 
+# Metrics
+metrics = "0.21"
+metrics-exporter-prometheus = "0.12"
+
 [build-dependencies]
 prost-build = "0.12"
 

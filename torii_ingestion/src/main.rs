@@ -6,10 +6,22 @@ use torii_ingestion_engine::core::ring_buffer::RingBuffer;
 use torii_ingestion_engine::model::NormalizedMarketData;
 use torii_ingestion_engine::producers::{MessageProducer, RedpandaProducer};
 
+use metrics::{describe_histogram, histogram};
+use metrics_exporter_prometheus::PrometheusBuilder;
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     info!("Starting HFT Ingestion Engine...");
+
+    // Initialize Prometheus
+    let builder = PrometheusBuilder::new();
+    builder
+        .with_http_listener(([0, 0, 0, 0], 9003))
+        .install()
+        .expect("failed to install Prometheus recorder");
+
+    describe_histogram!("ingestion_latency_seconds", "End-to-end latency from exchange to ingestion");
 
     let settings = Settings::new()?;
     info!("Loaded configuration: {:?}", settings);
@@ -73,6 +85,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             loop {
                 if let Some(data) = rb_consumer.pop() {
+                    // Calculate Latency
+                    let now = chrono::Utc::now();
+                    if now > data.time_exchange {
+                         let latency = (now - data.time_exchange).to_std().unwrap_or_default().as_secs_f64();
+                         histogram!("ingestion_latency_seconds", latency);
+                    }
+
                     if let Err(e) = producer.send(&topic_prefix, &data).await {
                         debug!("Failed to send to Redpanda: {}", e);
                     }

@@ -46,3 +46,24 @@ Learn how to monitor, debug, and inspect the data pipeline.
 ## 5. Troubleshooting
 - **Service Logs**: `docker compose logs -f <service_name>`
 - **MinIO Cold Storage**: Access `http://localhost:9001` (admin/secret) to verify Parquet archives in `s3://archive/`.
+
+## 6. Prometheus (Metrics Server)
+**UI**: `http://localhost:9091`
+
+### Scrape Targets
+- **Torii Ingestion**: `http://localhost:9003/metrics` (Latency Histogram)
+- **Torii Gateway**: `http://localhost:9002/metrics` (HTTP Request Counters)
+
+### Common PromQL Queries
+- **Ingestion Latency (99th Percentile)**:
+  ```promql
+  histogram_quantile(0.99, sum(rate(ingestion_latency_seconds_bucket[5m])) by (le))
+  ```
+- **Gateway Request Rate**:
+  ```promql
+  sum(rate(http_requests_total[1m])) by (status)
+  ```
+- **Rate Limit Breaches (429s)**:
+  ```promql
+  increase(http_requests_total{status="429"}[1h])
+  ```

@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'torii-ingestion'
+    static_configs:
+      - targets: ['torii-ingestion:9003']
+
+  - job_name: 'torii-gateway'
+    static_configs:
+      - targets: ['torii-gateway:9002']

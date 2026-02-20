@@ -12,6 +12,7 @@ use tracing::error;
 use crate::model::AuthContext;
 use crate::state::AppState;
 use sha2::{Digest, Sha256};
+use tracing::info;
 use uuid::Uuid;
 
 // Removed local AppState definition
@@ -164,8 +165,12 @@ pub async fn rate_limit_middleware(
     let user_id = auth_context.user_id;
 
     // Bypass for super-user (bootstrap)
+    // Bypass for super-user (bootstrap)
     if user_id.is_nil() {
-        return Ok(next.run(request).await);
+        let response = next.run(request).await;
+        let status_code = response.status().as_u16().to_string();
+        metrics::increment_counter!("http_requests_total", "status" => status_code);
+        return Ok(response);
     }
 
     let limit = auth_context.rate_limit as u64;
@@ -190,6 +195,7 @@ pub async fn rate_limit_middleware(
     let current_count: u64 = conn.zcard(&key).await.unwrap_or(0);
 
     if current_count >= limit {
+        metrics::increment_counter!("http_requests_total", "status" => "429");
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
 
@@ -209,6 +215,10 @@ pub async fn rate_limit_middleware(
     let headers = response.headers_mut();
     headers.insert("X-RateLimit-Limit", limit.into());
     headers.insert("X-RateLimit-Remaining", (limit - current_count - 1).into());
+
+    // Metrics
+    let status_code = response.status().as_u16().to_string();
+    metrics::increment_counter!("http_requests_total", "status" => status_code);
 
     Ok(response)
 }

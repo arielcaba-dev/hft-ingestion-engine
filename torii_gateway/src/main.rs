@@ -25,6 +25,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
     tracing_subscriber::fmt::init();
 
+    // Initialize Prometheus
+    let builder = metrics_exporter_prometheus::PrometheusBuilder::new();
+    builder
+        .with_http_listener(([0, 0, 0, 0], 9002))
+        .install()
+        .expect("failed to install Prometheus recorder");
+
+    metrics::describe_counter!("http_requests_total", "Total number of HTTP requests");
+
     // Load configuration
     let config = GatewayConfig::new()?;
     info!("Starting Gateway Service on port {}", config.server_port);
