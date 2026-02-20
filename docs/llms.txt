@@ -1,0 +1,47 @@
+# Torii Data - AI Agent Context Guide (LLM)
+
+You are an AI agent integrating with the Torii Data HFT Platform.
+Use the Model Context Protocol (MCP) endpoint (`POST /v1/mcp`) to fetch real-time market data, risk metrics, and sentiment analysis.
+
+## Authentication
+Header: `X-API-KEY: <your_api_key>`
+
+## MCP Query Guide
+The `/v1/mcp` endpoint accepts natural language intents. Use the following patterns for best results:
+
+### 1. Market Data Retrieval
+**Intent**: "Get OHLCV", "Show price", "Market data"
+**Query**: "Get recent OHLCV for {symbol}"
+**Context**: `{"symbol": "BTC-USD"}`
+**Returns**: Standard OHLCV candles.
+
+### 2. Risk Analysis
+**Intent**: "Risk", "Volatility", "VaR"
+**Query**: "Analyze risk for {symbol}"
+**Context**: `{"symbol": "ETH-USD"}`
+**Returns**: `var_95`, `volatility_1m` metrics from Arroyo pipeline.
+
+### 3. Sentiment Analysis
+**Intent**: "Sentiment", "News", "Social", "FUD", "Hype"
+**Query**: "Check sentiment for {symbol}"
+**Context**: `{"symbol": "SOL-USD"}`
+**Returns**: `sentiment_score` (-1 to 1) and `impact_score` (0-10) with source metadata.
+
+### 4. Correlation Analysis (Advanced)
+**Intent**: "Correlate", "Impact", "Effect of sentiment on price"
+**Query**: "Correlate sentiment and risk for {symbol}"
+**Context**: `{"symbol": "BTC-USD"}`
+**Returns**: A unified JSON object containing aligned `market_data` (price) and `sentiment_data` (score) for visualization or regression analysis.
+**Use Case**: Determine if huge social spikes precede volatility events.
+
+## JSON Response Structure
+```json
+{
+  "summary": "Executed query: ...",
+  "data": [
+    { "timestamp": "...", "price": 100.0, ... }
+  ],
+  "credits_used": 10
+}
+```
+For Correlation queries, `data` is replaced by specific keys: `market_data`, `sentiment_data`, `analysis`.

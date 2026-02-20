@@ -1,0 +1,155 @@
+openapi: 3.0.0
+info:
+  title: Torii Data HFT Ingestion Engine
+  description: High-frequency trading data ingestion, risk analysis, and AI context API.
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080
+    description: Local Development Server
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-KEY
+  schemas:
+    OHLCV:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        open:
+          type: number
+        high:
+          type: number
+        low:
+          type: number
+        close:
+          type: number
+        volume:
+          type: number
+    RiskMetric:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        symbol:
+          type: string
+        var_95:
+          type: number
+          description: Value at Risk (95% confidence)
+        volatility_1m:
+          type: number
+    SentimentMetric:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        symbol:
+          type: string
+        source:
+          type: string
+        sentiment_score:
+          type: number
+          minimum: -1.0
+          maximum: 1.0
+        impact_score:
+          type: number
+    MCPQuery:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          example: "Correlate sentiment and risk for BTC-USD"
+        context:
+          type: object
+          properties:
+            symbol:
+              type: string
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /v1/market/ohlcv:
+    get:
+      summary: Get fractional OHLCV data
+      parameters:
+        - name: symbol
+          in: query
+          required: true
+          schema:
+            type: string
+            example: "BTC-USD"
+        - name: timeframe
+          in: query
+          schema:
+            type: string
+            enum: [1s, 1m, 5m, 1h]
+            default: 1m
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OHLCV'
+  
+  /v1/market/risk:
+    get:
+      summary: Get real-time risk metrics
+      parameters:
+        - name: symbol
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RiskMetric'
+
+  /v1/mcp:
+    post:
+      summary: Model Context Protocol (AI Query Interface)
+      description: Execute complex natural language queries or specific analysis tasks. Costs credits.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MCPQuery'
+      responses:
+        '200':
+          description: Analysis result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      type: object
+                  credits_used:
+                    type: integer
