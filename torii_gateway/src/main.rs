@@ -137,6 +137,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/v1/market/risk",
             get(handlers::market::get_risk_metrics),
         )
+        .route(
+            "/v1/derivatives/liquidations/:symbol",
+            get(handlers::derivatives::get_liquidations),
+        )
+        .route(
+            "/v1/derivatives/oi/:symbol",
+            get(handlers::derivatives::get_open_interest),
+        )
         .route("/v1/keys", post(handlers::keys::create_api_key))
         .route("/v1/keys/:id", delete(handlers::keys::revoke_api_key))
         .layer(from_fn_with_state(

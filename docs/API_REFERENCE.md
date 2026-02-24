@@ -72,6 +72,52 @@ Fetch unified real-time risk calculations combining Arroyo metrics and DeFi indi
 
 ---
 
+### 4. Open Interest
+`GET /v1/derivatives/oi/{symbol}`
+
+Fetch the latest Open Interest snapshots from Binance Futures (polled every 60s).
+
+**Response (200 OK)**:
+```json
+{
+  "symbol": "BTC-USD",
+  "count": 1,
+  "open_interest": [
+    {
+      "timestamp": "2026-02-24T09:09:04Z",
+      "exchange": "binance_futures",
+      "oi_value": 81671.819,
+      "notional_value": 5163872267.09
+    }
+  ]
+}
+```
+
+### 5. Liquidations
+`GET /v1/derivatives/liquidations/{symbol}`
+
+Fetch recent forced-closure events from Binance Futures perpetual markets.
+
+**Response (200 OK)**:
+```json
+{
+  "symbol": "ETH-USD",
+  "count": 2,
+  "liquidations": [
+    {
+      "timestamp": "2026-02-24T09:09:52Z",
+      "exchange": "binance_futures",
+      "side": "Long",
+      "price": 1819.00,
+      "quantity": 3.443,
+      "notional": 6262.82
+    }
+  ]
+}
+```
+
+---
+
 ## WebSocket API
 
 `WS /v1/ws?token=<key>`

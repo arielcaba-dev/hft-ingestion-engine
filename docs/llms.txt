@@ -34,6 +34,33 @@ The `/v1/mcp` endpoint accepts natural language intents. Use the following patte
 **Returns**: A unified JSON object containing aligned `market_data` (price) and `sentiment_data` (score) for visualization or regression analysis.
 **Use Case**: Determine if huge social spikes precede volatility events.
 
+### 5. Open Interest
+**Intent**: "Open Interest", "OI"
+**Query**: "Check open interest for {symbol}"
+**Context**: `{"symbol": "BTC-USD"}`
+**Returns**: `oi_value` (contracts) and `notional_value` (USD) from Binance Futures.
+**Use Case**: Confirm trend strength — rising OI + rising price = strong trend.
+
+### 6. Liquidations
+**Intent**: "Liquidation", "Liquidations", "Forced closures"
+**Query**: "Show recent liquidations for {symbol}"
+**Context**: `{"symbol": "ETH-USD"}`
+**Returns**: Array of `{side, price, quantity, notional}` events.
+**Use Case**: Identify capitulation events and mean-reversion entry points.
+
+### 7. Squeeze Analysis (Advanced)
+**Intent**: "Squeeze", "Leverage", "Short squeeze", "Long squeeze"
+**Query**: "Analyze squeeze risk for {symbol}"
+**Context**: `{"symbol": "BTC-USD"}`
+**Returns**: Unified response with `squeeze_signal`, `long_liquidation_notional`, `short_liquidation_notional`, plus `liquidations`, `open_interest`, and `price_data` arrays.
+**Use Case**: Detect short/long squeeze conditions by comparing directional liquidation imbalance.
+
+## REST Endpoints (Direct Access)
+- `GET /v1/derivatives/oi/{symbol}` — Open Interest history
+- `GET /v1/derivatives/liquidations/{symbol}` — Liquidation events
+- `GET /v1/market/risk?symbol={symbol}` — Risk metrics
+- `GET /v1/market/ohlcv?symbol={symbol}` — OHLCV candles
+
 ## JSON Response Structure
 ```json
 {
@@ -44,4 +71,5 @@ The `/v1/mcp` endpoint accepts natural language intents. Use the following patte
   "credits_used": 10
 }
 ```
-For Correlation queries, `data` is replaced by specific keys: `market_data`, `sentiment_data`, `analysis`.
+For Correlation queries, `data` is replaced by: `market_data`, `sentiment_data`, `analysis`.
+For Squeeze queries, response contains: `squeeze_signal`, `liquidations`, `open_interest`, `price_data`.

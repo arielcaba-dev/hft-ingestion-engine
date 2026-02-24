@@ -44,6 +44,8 @@ Binance WebSocket → Torii Ingestion → Redpanda → Torii Gateway → WebSock
 - ✅ **Sub-second latency** end-to-end
 - ✅ **Grafana Dashboards** provisioned and operational
 - ✅ **Real-time streaming** from Binance (BTC-USD, ETH-USD)
+- ✅ **Derivatives**: Open Interest & Liquidation data from Binance Futures
+- ✅ **AI-Ready**: MCP with Squeeze Analysis, Sentiment Correlation
 
 
 ## Key Components

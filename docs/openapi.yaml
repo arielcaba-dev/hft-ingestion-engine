@@ -72,6 +72,41 @@ components:
           properties:
             symbol:
               type: string
+    Liquidation:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        symbol:
+          type: string
+        exchange:
+          type: string
+        side:
+          type: string
+          enum: [Long, Short]
+        price:
+          type: number
+        quantity:
+          type: number
+        notional:
+          type: number
+    OpenInterest:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        symbol:
+          type: string
+        exchange:
+          type: string
+        oi_value:
+          type: number
+          description: Number of outstanding contracts
+        notional_value:
+          type: number
+          description: USD notional value
 
 security:
   - ApiKeyAuth: []
@@ -126,6 +161,62 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/RiskMetric'
+
+  /v1/derivatives/oi/{symbol}:
+    get:
+      summary: Get Open Interest history
+      description: Returns OI snapshots from Binance Futures, polled every 60s.
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "BTC-USD"
+      responses:
+        '200':
+          description: Open Interest data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  symbol:
+                    type: string
+                  count:
+                    type: integer
+                  open_interest:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpenInterest'
+
+  /v1/derivatives/liquidations/{symbol}:
+    get:
+      summary: Get recent liquidation events
+      description: Returns forced closure events from Binance Futures perpetual markets.
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "ETH-USD"
+      responses:
+        '200':
+          description: Liquidation events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  symbol:
+                    type: string
+                  count:
+                    type: integer
+                  liquidations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Liquidation'
 
   /v1/mcp:
     post:

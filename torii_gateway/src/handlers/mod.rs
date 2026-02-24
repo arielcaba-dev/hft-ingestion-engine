@@ -1,3 +1,4 @@
+pub mod derivatives;
 pub mod health;
 pub mod historical;
 pub mod market;
