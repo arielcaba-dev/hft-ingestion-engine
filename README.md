@@ -121,6 +121,8 @@ The complete stack is containerized and can be deployed with a single command.
     -   **Arroyo** (Stream processing cluster)
     -   **Grafana** (Visualization)
     -   **MinIO** (S3-compatible storage)
+    -   **Derivatives Workers** (OI & Liquidation ingestion)
+    -   **Retention Worker** (24-hour QuestDB data cleanup)
 
 2.  **Initialize Pipeline**
     Once services are up (wait ~30s), run the initialization script to verify health, create topics, and check data flow:

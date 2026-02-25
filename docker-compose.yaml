@@ -356,6 +356,25 @@ services:
         limits:
           memory: 256M
 
+  retention-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.bridge
+    container_name: retention-worker
+    command: [ "python3", "-u", "scripts/clean_old_data.py" ]
+    restart: always
+    environment:
+      QUESTDB_HOST: "questdb"
+    depends_on:
+      questdb:
+        condition: service_healthy
+    networks:
+      - crypto_net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
 volumes:
   redpanda_data:
   postgres_data:
