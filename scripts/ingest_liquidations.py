@@ -17,10 +17,12 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "--break-system-packages", "--user", "websockets"])
     import websockets
 
+import os
 from questdb.ingress import Sender, TimestampNanos
 
 # Configuration
-QUESTDB_CONF = "tcp::addr=localhost:9009;"
+QUESTDB_HOST = os.getenv("QUESTDB_HOST", "localhost")
+QUESTDB_CONF = f"tcp::addr={QUESTDB_HOST}:9009;"
 BINANCE_WS = "wss://fstream.binance.com/ws/!forceOrder@arr"
 
 # Symbols we care about (normalized)

@@ -14,10 +14,12 @@ try:
 except:
     pass
 
+import os
 from questdb.ingress import Sender, TimestampNanos
 
 # Configuration
-QUESTDB_CONF = "tcp::addr=localhost:9009;"
+QUESTDB_HOST = os.getenv("QUESTDB_HOST", "localhost")
+QUESTDB_CONF = f"tcp::addr={QUESTDB_HOST}:9009;"
 POLL_INTERVAL = 60  # seconds
 
 # Symbols to track

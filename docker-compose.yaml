@@ -315,6 +315,47 @@ services:
         limits:
           memory: 512M
 
+  # --------------------------------------------------------------------------
+  # DERIVATIVES WORKERS (Phase 13)
+  # --------------------------------------------------------------------------
+  liquidation-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.bridge
+    container_name: liquidation-worker
+    command: [ "python3", "-u", "scripts/ingest_liquidations.py" ]
+    restart: always
+    environment:
+      QUESTDB_HOST: "questdb"
+    depends_on:
+      questdb:
+        condition: service_healthy
+    networks:
+      - crypto_net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  oi-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.bridge
+    container_name: oi-worker
+    command: [ "python3", "-u", "scripts/ingest_open_interest.py" ]
+    restart: always
+    environment:
+      QUESTDB_HOST: "questdb"
+    depends_on:
+      questdb:
+        condition: service_healthy
+    networks:
+      - crypto_net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
 volumes:
   redpanda_data:
   postgres_data:
