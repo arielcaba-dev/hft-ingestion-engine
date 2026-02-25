@@ -55,7 +55,15 @@ The `/v1/mcp` endpoint accepts natural language intents. Use the following patte
 **Returns**: Unified response with `squeeze_signal`, `long_liquidation_notional`, `short_liquidation_notional`, plus `liquidations`, `open_interest`, and `price_data` arrays.
 **Use Case**: Detect short/long squeeze conditions by comparing directional liquidation imbalance.
 
+### 8. Funding Rates & Cost of Carry
+**Intent**: "Funding", "Funding Rate", "Carry", "Premium"
+**Query**: "What is the funding rate and cost of carry for {symbol}?"
+**Context**: `{"symbol": "BTC-USD"}`
+**Returns**: `funding_rate`, `mark_price`, and an auto-calculated `annualized_carry_pct`.
+**Use Case**: Determine if holding a perpetual swap position is generating positive yield or bleeding capital.
+
 ## REST Endpoints (Direct Access)
+- `GET /v1/derivatives/funding/{symbol}` — Funding rates & mark price
 - `GET /v1/derivatives/oi/{symbol}` — Open Interest history
 - `GET /v1/derivatives/liquidations/{symbol}` — Liquidation events
 - `GET /v1/market/risk?symbol={symbol}` — Risk metrics

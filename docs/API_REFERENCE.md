@@ -116,6 +116,27 @@ Fetch recent forced-closure events from Binance Futures perpetual markets.
 }
 ```
 
+### 6. Funding Rates
+`GET /v1/derivatives/funding/{symbol}`
+
+Fetch recent funding rates and mark prices from Binance Futures.
+
+**Response (200 OK)**:
+```json
+{
+  "symbol": "BTC-USD",
+  "count": 1,
+  "funding_rates": [
+    {
+      "exchange": "binance_futures",
+      "timestamp": "2026-02-25T11:43:57Z",
+      "funding_rate": -0.00001001,
+      "mark_price": 65361.9
+    }
+  ]
+}
+```
+
 ---
 
 ## WebSocket API

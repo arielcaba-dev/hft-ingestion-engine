@@ -145,6 +145,23 @@ pub async fn mcp_handler(
             json!({ "timestamp": dt.to_rfc3339(), "oi_value": row.get::<f64, _>("oi_value"), "notional": row.get::<f64, _>("notional_value") })
         }).collect();
         json!({ "type": "open_interest", "symbol": symbol_context, "data": data, "credits_used": cost })
+    } else if query_lower.contains("funding") || query_lower.contains("carry") || query_lower.contains("premium") {
+        // --- Funding Rate / Cost of Carry ---
+        let funding_query = format!(
+            "SELECT CAST(timestamp AS BIGINT) as timestamp, funding_rate, mark_price FROM funding_rates WHERE symbol = '{}' ORDER BY timestamp DESC LIMIT 50",
+            symbol_context
+        );
+        let rows = sqlx::query(&funding_query).fetch_all(&state.questdb).await.map_err(|e| AppError::Internal(e.to_string()))?;
+        let data: Vec<serde_json::Value> = rows.into_iter().map(|row| {
+            let ts: i64 = row.get("timestamp");
+            let dt = chrono::DateTime::from_timestamp_micros(ts).unwrap_or_default();
+            let funding_rate: f64 = row.get("funding_rate");
+            // Standardize annualized cost of carry mapping assuming 8-hour funding logic applies continuously
+            // (Rate * 3 payments/day * 365 days * 100 for percentage)
+            let annualized_carry = funding_rate * 3.0 * 365.0 * 100.0;
+            json!({ "timestamp": dt.to_rfc3339(), "funding_rate": funding_rate, "mark_price": row.get::<f64, _>("mark_price"), "annualized_carry_pct": annualized_carry })
+        }).collect();
+        json!({ "type": "funding_rates", "symbol": symbol_context, "data": data, "analysis": "Annualized carry is calculated assuming constant 8hr funding payout frequencies.", "credits_used": cost })
     } else if query_lower.contains("correlat") || query_lower.contains("impact") || (query_lower.contains("risk") && query_lower.contains("sentiment")) {
         // --- Correlation Logic ---
         let trades_query = format!(

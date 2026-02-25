@@ -362,6 +362,26 @@ services:
         limits:
           memory: 256M
 
+  funding-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.bridge
+    container_name: funding-worker
+    image: torii/funding-worker:latest
+    command: [ "python3", "-u", "scripts/ingest_funding_rates.py" ]
+    restart: always
+    environment:
+      QUESTDB_HOST: "questdb"
+    depends_on:
+      questdb:
+        condition: service_healthy
+    networks:
+      - crypto_net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
   retention-worker:
     build:
       context: .

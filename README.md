@@ -122,6 +122,7 @@ The complete stack is containerized and can be deployed with a single command.
     -   **Grafana** (Visualization)
     -   **MinIO** (S3-compatible storage)
     -   **Derivatives Workers** (OI & Liquidation ingestion)
+    -   **Funding Worker** (Funding rates & mark price tracking)
     -   **Retention Worker** (24-hour QuestDB data cleanup)
 
 2.  **Initialize Pipeline**

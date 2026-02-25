@@ -27,6 +27,15 @@ TABLES = [
         quantity DOUBLE
     ) TIMESTAMP(timestamp) PARTITION BY DAY WAL;
     """,
+    """
+    CREATE TABLE IF NOT EXISTS funding_rates (
+        timestamp TIMESTAMP,
+        symbol SYMBOL,
+        exchange SYMBOL,
+        funding_rate DOUBLE,
+        mark_price DOUBLE
+    ) TIMESTAMP(timestamp) PARTITION BY DAY WAL;
+    """,
 ]
 
 def create_tables():
