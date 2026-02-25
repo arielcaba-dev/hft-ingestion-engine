@@ -80,6 +80,7 @@ services:
       context: .
       dockerfile: Dockerfile.worker
     container_name: arroyo
+    image: torii/arroyo-worker:latest
     command: cluster
     environment:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
@@ -140,6 +141,7 @@ services:
       context: ./torii_ingestion
       dockerfile: Dockerfile
     container_name: torii-ingestion
+    image: torii/torii-ingestion:latest
     ports:
       - "9003:9003"
     environment:
@@ -174,6 +176,7 @@ services:
       context: .
       dockerfile: Dockerfile.bridge
     container_name: questdb-bridge
+    image: torii/questdb-bridge:latest
     restart: always
     environment:
       KAFKA_BROKER: "redpanda:9092"
@@ -282,6 +285,7 @@ services:
       context: ./torii_gateway
       dockerfile: Dockerfile
     container_name: gateway
+    image: torii/torii-gateway:latest
     ports:
       - "8080:8080"
       - "9002:9002"
@@ -323,6 +327,7 @@ services:
       context: .
       dockerfile: Dockerfile.bridge
     container_name: liquidation-worker
+    image: torii/liquidation-worker:latest
     command: [ "python3", "-u", "scripts/ingest_liquidations.py" ]
     restart: always
     environment:
@@ -342,6 +347,7 @@ services:
       context: .
       dockerfile: Dockerfile.bridge
     container_name: oi-worker
+    image: torii/oi-worker:latest
     command: [ "python3", "-u", "scripts/ingest_open_interest.py" ]
     restart: always
     environment:
@@ -361,6 +367,7 @@ services:
       context: .
       dockerfile: Dockerfile.bridge
     container_name: retention-worker
+    image: torii/retention-worker:latest
     command: [ "python3", "-u", "scripts/clean_old_data.py" ]
     restart: always
     environment:
